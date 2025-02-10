@@ -14,15 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for (some of) mod/quiz/report/reportlib.php
- *
- * @package   mod_quiz
- * @category  phpunit
- * @copyright 2008 Jamie Pratt me@jamiep.org
- * @license   http://www.gnu.org/copyleft/gpl.html GNU Public License
- */
+namespace mod_quiz;
 
+use quiz_attempt;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -33,13 +27,15 @@ require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 /**
  * This class contains the test cases for the functions in reportlib.php.
  *
+ * @package   mod_quiz
+ * @category  test
  * @copyright 2008 Jamie Pratt me@jamiep.org
  * @license   http://www.gnu.org/copyleft/gpl.html GNU Public License
  */
-class mod_quiz_reportlib_testcase extends advanced_testcase {
-    public function test_quiz_report_index_by_keys() {
-        $datum = array();
-        $object = new stdClass();
+final class reportlib_test extends \advanced_testcase {
+    public function test_quiz_report_index_by_keys(): void {
+        $datum = [];
+        $object = new \stdClass();
         $object->qid = 3;
         $object->aid = 101;
         $object->response = '';
@@ -62,7 +58,7 @@ class mod_quiz_reportlib_testcase extends advanced_testcase {
     }
 
     public function test_quiz_report_scale_summarks_as_percentage() {
-        $quiz = new stdClass();
+        $quiz = new \stdClass();
         $quiz->sumgrades = 10;
         $quiz->decimalpoints = 2;
 
@@ -75,13 +71,13 @@ class mod_quiz_reportlib_testcase extends advanced_testcase {
     }
 
     public function test_quiz_report_qm_filter_select_only_one_attempt_allowed() {
-        $quiz = new stdClass();
+        $quiz = new \stdClass();
         $quiz->attempts = 1;
         $this->assertSame('', quiz_report_qm_filter_select($quiz));
     }
 
     public function test_quiz_report_qm_filter_select_average() {
-        $quiz = new stdClass();
+        $quiz = new \stdClass();
         $quiz->attempts = 10;
         $quiz->grademethod = QUIZ_GRADEAVERAGE;
         $this->assertSame('', quiz_report_qm_filter_select($quiz));
@@ -91,7 +87,7 @@ class mod_quiz_reportlib_testcase extends advanced_testcase {
         global $DB;
         $this->resetAfterTest();
 
-        $fakeattempt = new stdClass();
+        $fakeattempt = new \stdClass();
         $fakeattempt->userid = 123;
         $fakeattempt->quiz = 456;
         $fakeattempt->layout = '1,2,0,3,4,0,5';
@@ -137,7 +133,7 @@ class mod_quiz_reportlib_testcase extends advanced_testcase {
         $fakeattempt->uniqueid = 65;
         $DB->insert_record('quiz_attempts', $fakeattempt);
 
-        $quiz = new stdClass();
+        $quiz = new \stdClass();
         $quiz->attempts = 10;
 
         $quiz->grademethod = QUIZ_ATTEMPTFIRST;
@@ -164,5 +160,38 @@ class mod_quiz_reportlib_testcase extends advanced_testcase {
         $this->assertEquals(1, count($bestattempt));
         $bestattempt = reset($bestattempt);
         $this->assertEquals(2, $bestattempt->attempt);
+    }
+
+    public function test_quiz_results_never_below_zero() {
+        global $DB;
+        $this->resetAfterTest();
+
+        $quizid = 7;
+        $fakegrade = new \stdClass();
+        $fakegrade->quiz = $quizid;
+
+        // Have 5 test grades.
+        $fakegrade->userid = 10;
+        $fakegrade->grade = 6.66667;
+        $DB->insert_record('quiz_grades', $fakegrade);
+
+        $fakegrade->userid = 11;
+        $fakegrade->grade = -2.86;
+        $DB->insert_record('quiz_grades', $fakegrade);
+
+        $fakegrade->userid = 12;
+        $fakegrade->grade = 10.0;
+        $DB->insert_record('quiz_grades', $fakegrade);
+
+        $fakegrade->userid = 13;
+        $fakegrade->grade = -5.0;
+        $DB->insert_record('quiz_grades', $fakegrade);
+
+        $fakegrade->userid = 14;
+        $fakegrade->grade = 33.33333;
+        $DB->insert_record('quiz_grades', $fakegrade);
+
+        $data = quiz_report_grade_bands(5, 20, $quizid);
+        $this->assertGreaterThanOrEqual(0, min(array_keys($data)));
     }
 }

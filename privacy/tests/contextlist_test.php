@@ -36,7 +36,7 @@ use \core_privacy\local\request\contextlist;
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @coversDefaultClass \core_privacy\local\request\contextlist
  */
-class contextlist_test extends advanced_testcase {
+final class contextlist_test extends advanced_testcase {
 
     /**
      * Ensure that valid SQL results in the relevant contexts being added.
@@ -111,8 +111,8 @@ class contextlist_test extends advanced_testcase {
         $this->assertCount(2, $cl);
 
         $contexts = $cl->get_contextids();
-        $this->assertContains(\context_user::instance($user1->id)->id, $contexts);
-        $this->assertContains(\context_user::instance($user2->id)->id, $contexts);
+        $this->assertContainsEquals(\context_user::instance($user1->id)->id, $contexts);
+        $this->assertContainsEquals(\context_user::instance($user2->id)->id, $contexts);
     }
 
     /**
@@ -138,7 +138,7 @@ class contextlist_test extends advanced_testcase {
      *
      * @return array
      */
-    public function data_guess_id_field_from_sql() {
+    public static function data_guess_id_field_from_sql(): array {
         return [
             'easy' => [
                 'SELECT contextid FROM {foo}',

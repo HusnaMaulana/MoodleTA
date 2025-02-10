@@ -105,8 +105,11 @@ class player {
      * @param stdClass $config Configuration for H5P buttons.
      * @param bool $preventredirect Set to true in scripts that can not redirect (CLI, RSS feeds, etc.), throws exceptions
      * @param string $component optional moodle component to sent xAPI tracking
+     * @param bool $skipcapcheck Whether capabilities should be checked or not to get the pluginfile URL because sometimes they
+     *     might be controlled before calling this method.
      */
-    public function __construct(string $url, \stdClass $config, bool $preventredirect = true, string $component = '') {
+    public function __construct(string $url, \stdClass $config, bool $preventredirect = true, string $component = '',
+            bool $skipcapcheck = false) {
         if (empty($url)) {
             throw new \moodle_exception('h5pinvalidurl', 'core_h5p');
         }
@@ -127,7 +130,9 @@ class player {
             $url,
             $config,
             $this->factory,
-            $this->messages
+            $this->messages,
+            $this->preventredirect,
+            $skipcapcheck
         );
         if ($file) {
             $this->context = \context::instance_by_id($file->get_contextid());
@@ -148,12 +153,14 @@ class player {
      * @param stdClass $config Configuration for H5P buttons.
      * @param bool $preventredirect Set to true in scripts that can not redirect (CLI, RSS feeds, etc.), throws exceptions
      * @param string $component optional moodle component to sent xAPI tracking
+     * @param bool $displayedit Whether the edit button should be displayed below the H5P content.
      *
      * @return string The embedable code to display a H5P file.
      */
     public static function display(string $url, \stdClass $config, bool $preventredirect = true,
-            string $component = ''): string {
-        global $OUTPUT;
+            string $component = '', bool $displayedit = false): string {
+        global $OUTPUT, $CFG;
+
         $params = [
                 'url' => $url,
                 'preventredirect' => $preventredirect,
@@ -170,6 +177,16 @@ class player {
 
         $template = new \stdClass();
         $template->embedurl = $fileurl->out(false);
+
+        if ($displayedit) {
+            list($originalfile, $h5p) = api::get_original_content_from_pluginfile_url($url, $preventredirect, true);
+            if ($originalfile) {
+                // Check if the user can edit this content.
+                if (api::can_edit_content($originalfile)) {
+                    $template->editurl = $CFG->wwwroot . '/h5p/edit.php?url=' . $url;
+                }
+            }
+        }
 
         $result = $OUTPUT->render_from_template('core_h5p/h5pembed', $template);
         $result .= self::get_resize_code();
@@ -300,6 +317,7 @@ class player {
 
         $systemcontext = \context_system::instance();
         $slug = $this->content['slug'] ? $this->content['slug'] . '-' : '';
+        $filename = "{$slug}{$this->content['id']}.h5p";
         // We have to build the right URL.
         // Depending the request was made through webservice/pluginfile.php or pluginfile.php.
         if (strpos($this->url, '/webservice/pluginfile.php')) {
@@ -309,7 +327,7 @@ class player {
                 \core_h5p\file_storage::EXPORT_FILEAREA,
                 '',
                 '',
-                "{$slug}{$this->content['id']}.h5p"
+                $filename
             );
         } else {
             // If the request is made by tokenpluginfile.php we need to indicates to generate a token for current user.
@@ -323,12 +341,17 @@ class player {
                 \core_h5p\file_storage::EXPORT_FILEAREA,
                 '',
                 '',
-                "{$slug}{$this->content['id']}.h5p",
+                $filename,
                 false,
                 $includetoken
             );
         }
 
+        // Get the required info from the export file to be able to get the export file by third apps.
+        $file = helper::get_export_info($filename, $url);
+        if ($file) {
+            $url->param('modified', $file['timemodified']);
+        }
         return $url;
     }
 
@@ -353,11 +376,14 @@ class player {
         $settings['moodleLibraryPaths'] = $this->core->get_dependency_roots($this->h5pid);
         // Add also the Moodle component where the results will be tracked.
         $settings['moodleComponent'] = $this->component;
+        if (!empty($settings['moodleComponent'])) {
+            $settings['reportingIsEnabled'] = true;
+        }
 
         $cid = $this->get_cid();
         // The filterParameters function should be called before getting the dependencyfiles because it rebuild content
         // dependency cache and export file.
-        $settings['contents'][$cid]['jsonContent'] = $this->core->filterParameters($this->content);
+        $settings['contents'][$cid]['jsonContent'] = $this->get_filtered_parameters();
 
         $files = $this->get_dependency_files();
         if ($this->embedtype === 'div') {
@@ -399,13 +425,42 @@ class player {
     }
 
     /**
+     * Get filtered parameters, modifying them by the renderer if the theme implements the h5p_alter_filtered_parameters function.
+     *
+     * @return string Filtered parameters.
+     */
+    private function get_filtered_parameters(): string {
+        global $PAGE;
+
+        $safeparams = $this->core->filterParameters($this->content);
+        $decodedparams = json_decode($safeparams);
+        $h5poutput = $PAGE->get_renderer('core_h5p');
+        $h5poutput->h5p_alter_filtered_parameters(
+            $decodedparams,
+            $this->content['library']['name'],
+            $this->content['library']['majorVersion'],
+            $this->content['library']['minorVersion']
+        );
+        $safeparams = json_encode($decodedparams);
+
+        return $safeparams;
+    }
+
+    /**
      * Finds library dependencies of view
      *
      * @return array Files that the view has dependencies to
      */
     private function get_dependency_files(): array {
+        global $PAGE;
+
         $preloadeddeps = $this->core->loadContentDependencies($this->h5pid, 'preloaded');
         $files = $this->core->getDependenciesFiles($preloadeddeps);
+
+        // Add additional asset files if required.
+        $h5poutput = $PAGE->get_renderer('core_h5p');
+        $h5poutput->h5p_alter_scripts($files['scripts'], $preloadeddeps, $this->embedtype);
+        $h5poutput->h5p_alter_styles($files['styles'], $preloadeddeps, $this->embedtype);
 
         return $files;
     }
@@ -440,7 +495,7 @@ class player {
         }
 
         $template = new \stdClass();
-        $template->embedurl = self::get_embed_url($url)->out();
+        $template->embedurl = self::get_embed_url($url, $this->component)->out(false);
 
         return $OUTPUT->render_from_template('core_h5p/h5pembed', $template);
     }
@@ -448,23 +503,33 @@ class player {
     /**
      * Get the encoded URL for embeding this H5P content.
      * @param  string $url The URL of the .h5p file.
+     * @param string $component optional Moodle component to send xAPI tracking
      *
      * @return \moodle_url The embed URL.
      */
-    public static function get_embed_url(string $url): \moodle_url {
-        return new \moodle_url('/h5p/embed.php', ['url' => $url]);
+    public static function get_embed_url(string $url, string $component = ''): \moodle_url {
+        $params = ['url' => $url];
+        if (!empty($component)) {
+            // If component is not empty, it will be passed too, in order to allow tracking too.
+            $params['component'] = $component;
+        }
+
+        return new \moodle_url('/h5p/embed.php', $params);
     }
 
     /**
      * Return the info export file for Mobile App.
      *
-     * @return array
+     * @return array or null
      */
-    public function get_export_file(): array {
+    public function get_export_file(): ?array {
         // Get the export url.
         $exporturl = $this->get_export_settings(true);
         // Get the filename of the export url.
         $path = $exporturl->out_as_local_url();
+        // Check if the URL has parameters.
+        $parts = explode('?', $path);
+        $path = array_shift($parts);
         $parts = explode('/', $path);
         $filename = array_pop($parts);
         // Get the required info from the export file to be able to get the export file by third apps.

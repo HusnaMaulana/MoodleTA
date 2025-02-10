@@ -107,6 +107,12 @@ class file_storage {
      * @return string sha1 hash
      */
     public static function get_pathname_hash($contextid, $component, $filearea, $itemid, $filepath, $filename) {
+        if (substr($filepath, 0, 1) != '/') {
+            $filepath = '/' . $filepath;
+        }
+        if (substr($filepath, - 1) != '/') {
+            $filepath .= '/';
+        }
         return sha1("/$contextid/$component/$filearea/$itemid".$filepath.$filename);
     }
 
@@ -224,7 +230,7 @@ class file_storage {
     /**
      * Returns an image file that represent the given stored file as a preview
      *
-     * At the moment, only GIF, JPEG and PNG files are supported to have previews. In the
+     * At the moment, only GIF, JPEG, PNG and SVG files are supported to have previews. In the
      * future, the support for other mimetypes can be added, too (eg. generate an image
      * preview of PDF, text documents etc).
      *
@@ -410,7 +416,9 @@ class file_storage {
         if ($mimetype === 'image/gif' or $mimetype === 'image/jpeg' or $mimetype === 'image/png') {
             // make a preview of the image
             $data = $this->create_imagefile_preview($file, $mode);
-
+        } else if ($mimetype === 'image/svg+xml') {
+            // If we have an SVG image, then return the original (scalable) file.
+            return $file;
         } else {
             // unable to create the preview of this mimetype yet
             return false;
@@ -661,6 +669,41 @@ class file_storage {
             $result[$filerecord->pathnamehash] = $this->get_file_instance($filerecord);
         }
         return $result;
+    }
+
+    /**
+     * Returns the file area item ids and their updatetime for a user's draft uploads, sorted by updatetime DESC.
+     *
+     * @param int $userid user id
+     * @param int $updatedsince only return draft areas updated since this time
+     * @param int $lastnum only return the last specified numbers
+     * @return array
+     */
+    public function get_user_draft_items(int $userid, int $updatedsince = 0, int $lastnum = 0): array {
+        global $DB;
+
+        $params = [
+            'component' => 'user',
+            'filearea' => 'draft',
+            'contextid' => context_user::instance($userid)->id,
+        ];
+
+        $updatedsincesql = '';
+        if ($updatedsince) {
+            $updatedsincesql = 'AND f.timemodified > :time';
+            $params['time'] = $updatedsince;
+        }
+        $sql = "SELECT itemid,
+                       MAX(f.timemodified) AS timemodified
+                  FROM {files} f
+                 WHERE component = :component
+                       AND filearea = :filearea
+                       AND contextid = :contextid
+                       $updatedsincesql
+              GROUP BY itemid
+              ORDER BY MAX(f.timemodified) DESC";
+
+        return $DB->get_records_sql($sql, $params, 0, $lastnum);
     }
 
     /**
@@ -1204,7 +1247,7 @@ class file_storage {
             $tmpfile = tempnam($this->tempdir, 'newfromurl');
             $content = download_file_content($url, $headers, $postdata, $fullresponse, $timeout, $connecttimeout, $skipcertverify, $tmpfile, $calctimeout);
             if ($content === false) {
-                throw new file_exception('storedfileproblem', 'Can not fetch file form URL');
+                throw new file_exception('storedfileproblem', 'Cannot fetch file from URL');
             }
             try {
                 $newfile = $this->create_file_from_pathname($filerecord, $tmpfile);
@@ -1218,7 +1261,7 @@ class file_storage {
         } else {
             $content = download_file_content($url, $headers, $postdata, $fullresponse, $timeout, $connecttimeout, $skipcertverify, NULL, $calctimeout);
             if ($content === false) {
-                throw new file_exception('storedfileproblem', 'Can not fetch file form URL');
+                throw new file_exception('storedfileproblem', 'Cannot fetch file from URL');
             }
             return $this->create_file_from_string($filerecord, $content);
         }
@@ -1763,7 +1806,7 @@ class file_storage {
                 // the latter of which can go to 100, we need to make sure that quality here is
                 // in a safe range or PHP WILL CRASH AND DIE. You have been warned.
                 $quality = $quality > 9 ? (int)(max(1.0, (float)$quality / 100.0) * 9.0) : $quality;
-                imagepng($img, NULL, $quality, NULL);
+                imagepng($img, null, $quality, PNG_NO_FILTER);
                 break;
 
             default:
@@ -1914,7 +1957,7 @@ class file_storage {
         if ($decoded === false) {
             throw new file_reference_exception(null, $str, null, null, 'Invalid base64 format');
         }
-        $params = @unserialize($decoded); // hide E_NOTICE
+        $params = unserialize_array($decoded);
         if ($params === false) {
             throw new file_reference_exception(null, $decoded, null, null, 'Not an unserializeable value');
         }
@@ -2194,7 +2237,15 @@ class file_storage {
         if (file_exists($fullpath)) {
             // The type is unknown. Attempt to look up the file type now.
             $finfo = new finfo(FILEINFO_MIME_TYPE);
-            return mimeinfo_from_type('type', $finfo->file($fullpath));
+
+            // See https://bugs.php.net/bug.php?id=79045 - finfo isn't consistent with returned type, normalize into value
+            // that is used internally by the {@see core_filetypes} class and the {@see mimeinfo_from_type} call below.
+            $mimetype = $finfo->file($fullpath);
+            if ($mimetype === 'image/svg') {
+                $mimetype = 'image/svg+xml';
+            }
+
+            return mimeinfo_from_type('type', $mimetype);
         }
 
         return 'document/unknown';
@@ -2417,6 +2468,6 @@ class file_storage {
      * @return  string The file's content hash
      */
     public static function hash_from_string($content) {
-        return sha1($content);
+        return sha1($content ?? '');
     }
 }

@@ -14,25 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Provides the {@link mlbackend_python_processor_testcase} class.
- *
- * @package     mlbackend_python
- * @category    test
- * @copyright   2019 David Mudrák <david@moodle.com>
- * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace mlbackend_python;
 
 /**
  * Unit tests for the {@link \mlbackend_python\processor} class.
  *
+ * @package   mlbackend_python
+ * @category  test
  * @copyright 2019 David Mudrák <david@moodle.com>
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mlbackend_python\processor
  */
-class mlbackend_python_processor_testcase extends advanced_testcase {
-
+final class processor_test extends \advanced_testcase {
     /**
      * Test implementation of the {@link \mlbackend_python\processor::check_pip_package_version()} method.
      *
@@ -48,11 +41,12 @@ class mlbackend_python_processor_testcase extends advanced_testcase {
     /**
      * Check that the {@link \mlbackend_python\processor::check_pip_package_version()} can be called with single argument.
      */
-    public function test_check_pip_package_version_default() {
-
+    public function test_check_pip_package_version_default(): void {
         $this->assertSame(-1, \mlbackend_python\processor::check_pip_package_version('0.0.1'));
-        $this->assertSame(0, \mlbackend_python\processor::check_pip_package_version(
-            \mlbackend_python\processor::REQUIRED_PIP_PACKAGE_VERSION));
+        $this->assertSame(
+            0,
+            \mlbackend_python\processor::check_pip_package_version(\mlbackend_python\processor::REQUIRED_PIP_PACKAGE_VERSION),
+        );
     }
 
     /**
@@ -60,7 +54,7 @@ class mlbackend_python_processor_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function check_pip_package_versions() {
+    public static function check_pip_package_versions(): array {
         return [
             // Exact match.
             [

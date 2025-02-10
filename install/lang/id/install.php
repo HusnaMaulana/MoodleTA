@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -33,11 +32,12 @@ defined('MOODLE_INTERNAL') || die();
 $string['admindirname'] = 'Direktori admin';
 $string['availablelangs'] = 'Paket bahasa yang tersedia';
 $string['chooselanguagehead'] = 'Pilih bahasa';
-$string['chooselanguagesub'] = 'Silakan pilih bahasa untuk instalasi. Bahasa ini juga akan digunakan sebagai bahasa default untuk situs, meskipun mungkin akan diubah kemudian.';
-$string['clialreadyconfigured'] = 'Berkas konfigurasi config.php sudah ada. Silakan gunakan admin /cli/install_database.php untuk menginstal Moodle untuk situs ini.';
-$string['clialreadyinstalled'] = 'File konfigurasi config.php sudah ada. Silakan gunakan admin/cli/install_database.php untuk menginstal Moodle untuk situs ini.';
+$string['chooselanguagesub'] = 'Sila pilih bahasa untuk instalasi. Bahasa ini juga akan digunakan sebagai bahasa bawaan untuk situs, meskipun mungkin akan diubah kemudian.';
+$string['clialreadyconfigured'] = 'Berkas konfigurasi config.php sudah ada. Sila gunakan admin /cli/install_database.php untuk memasang Moodle untuk situs ini.';
+$string['clialreadyinstalled'] = 'Berkas konfigurasi config.php sudah ada. Silakan gunakan admin/cli/install_database.php untuk menginstal Moodle untuk situs ini.';
 $string['cliinstallheader'] = 'Program pemasangan baris perintah Moodle {$a}';
-$string['databasehost'] = 'Host basis data';
+$string['clitablesexist'] = 'Tabel basis data sudah ada; Instalasi CLI tidak dapat dilanjutkan.';
+$string['databasehost'] = 'Hos basis data';
 $string['databasename'] = 'Nama basis data';
 $string['databasetypehead'] = 'Pilih pengandar basis data';
 $string['dataroot'] = 'Direktori data';
@@ -45,14 +45,14 @@ $string['datarootpermission'] = 'Izin direktori data';
 $string['dbprefix'] = 'Prefiks tabel';
 $string['dirroot'] = 'Direktori Moodle';
 $string['environmenthead'] = 'Memeriksa sistem Anda ...';
-$string['environmentsub2'] = 'Setiap rilis Moodle memiliki beberapa persyaratan versi PHP minimum dan sejumlah ekstensi PHP wajib. Pemeriksaan komponen sistem akan dilakukan sebelum pemasangan dan peningkatan versi. Silakan hubungi administrator peladen jika Anda tidak tahu cara mamasang versi baru atau mengaktifkan ekstensi PHP.';
+$string['environmentsub2'] = 'Setiap rilis Moodle memiliki beberapa persyaratan versi PHP minimum dan sejumlah ekstensi PHP wajib. Pemeriksaan komponen sistem akan dilakukan sebelum pemasangan dan peningkatan versi. Silakan hubungi administrator server jika Anda tidak tahu cara mamasang versi baru atau mengaktifkan ekstensi PHP.';
 $string['errorsinenvironment'] = 'Pemeriksaan sistem gagal!';
 $string['installation'] = 'Instalasi';
 $string['langdownloaderror'] = 'Sayangnya bahasa "{$a}" tidak dapat diunduh. Proses instalasi akan dilanjutkan dalam bahasa Inggris.';
 $string['memorylimithelp'] = '<p> Batas memori PHP untuk server Anda saat ini diatur ke {$a}. </p> <p> Ini dapat menyebabkan Moodle memiliki masalah memori di kemudian hari, terutama jika Anda memiliki banyak modul yang diaktifkan dan/atau banyak pengguna. </p> <p> Kami menyarankan Anda mengkonfigurasi PHP dengan batas yang lebih tinggi jika memungkinkan, seperti 40M. Ada beberapa cara untuk melakukan ini yang dapat Anda coba: </p>
 <ol> <li> Jika Anda bisa, kompilasi ulang PHP dengan <i> --enable-memory-limit </i>. Ini memungkinkan Moodle untuk mengatur batas memori itu sendiri. </li>
- <li> Jika Anda memiliki akses ke file php.ini, Anda dapat mengubah pengaturan <b> memory_limit </b> di sana menjadi sekitar 40M. Jika Anda tidak memiliki akses, Anda mungkin dapat meminta administrator untuk melakukan ini untuk Anda. </li>
-<li> Pada beberapa server PHP, Anda dapat membuat file .htaccess di direktori Moodle yang berisi baris ini: <blockquote> <div> php_value memory_limit 40M </div> </blockquote> <p> Namun, pada beberapa server ini tidak diizinkan <b> semua </b> halaman PHP tidak berfungsi (Anda akan melihat kesalahan ketika Anda melihat halaman) sehingga Anda Anda harus menghapus file .htaccess. </p> </li> </ol>';
+ <li> Jika Anda memiliki akses ke berkas php.ini, Anda dapat mengubah setelan <b> memory_limit </b> di sana menjadi sekitar 40M. Jika Anda tidak memiliki akses, Anda mungkin dapat meminta administrator untuk melakukan ini untuk Anda. </li>
+<li> Pada beberapa server PHP, Anda dapat membuat berkas .htaccess di direktori Moodle yang berisi baris ini: <blockquote> <div> php_value memory_limit 40M </div> </blockquote> <p> Namun, pada beberapa server ini tidak diizinkan <b> semua </b> halaman PHP tidak berfungsi (Anda akan melihat kesalahan ketika Anda melihat halaman) sehingga Anda Anda harus menghapus berkas .htaccess. </p> </li> </ol>';
 $string['paths'] = 'Jalur';
 $string['pathserrcreatedataroot'] = 'Direktori data ({$a->dataroot}) tidak dapat dibuat  oleh installer.';
 $string['pathshead'] = 'Konfirmasi jalur';
@@ -66,12 +66,12 @@ $string['pathsunsecuredataroot'] = 'Lokasi dataroot tidak aman';
 $string['pathswrongadmindir'] = 'Direktori admin tidak ada';
 $string['phpextension'] = 'Ekstensi PHP {$a}';
 $string['phpversion'] = 'Versi PHP';
-$string['phpversionhelp'] = '<p> Moodle membutuhkan versi PHP setidaknya 5.6.5 atau 7.1 (7.0.x memiliki beberapa keterbatasan mesin). </p> <p> Anda saat ini menjalankan versi {$a}. </p> <p> Anda harus meningkatkan versi PHP atau pindah ke host dengan versi PHP yang lebih baru. </p>';
+$string['phpversionhelp'] = '<p> Moodle membutuhkan versi PHP setidaknya 5.6.5 atau 7.1 (7.0.x memiliki beberapa keterbatasan mesin). </p> <p> Anda saat ini menjalankan versi {$a}. </p> <p> Anda harus meningkatkan versi PHP atau pindah ke hos dengan versi PHP yang lebih baru. </p>';
 $string['welcomep10'] = '{$a->installername} ({$a->installerversion})';
 $string['welcomep20'] = 'Anda melihat halaman ini karena Anda telah berhasil memasang dan meluncurkan paket <strong> {$a->packname} {$a->packversion}</strong> di komputer Anda. Selamat!';
 $string['welcomep30'] = 'Rilis <strong> {$a->installername}</strong> ini mencakup aplikasi untuk menciptakan lingkungan tempat <strong> Moodle </strong> yang akan digunakan, yaitu:';
 $string['welcomep40'] = 'Paket juga termasuk <strong>Moodle {$a->moodlerelease} ({$a->moodleversion})</strong>.';
-$string['welcomep50'] = 'Penggunaan semua aplikasi dalam paket ini diatur oleh lisensi masing-masing. Paket <strong>{$a->installername}</strong> lengkap adalah <a href="http://www.opensource.org/docs/definition_plain.html"> sumber terbuka </a> dan didistribusikan di bawah lisensi <a href="http://www.gnu.org/copyleft/gpl.html"> GPL </a>.';
-$string['welcomep60'] = 'Halaman-halaman berikut akan menuntun Anda melalui beberapa langkah yang mudah diikuti untuk mengonfigurasi dan menyiapkan <strong> Moodle </strong> di komputer Anda. Anda dapat menerima pengaturan bawaan atau, secara opsional, mengubahnya sesuai dengan kebutuhan Anda.';
-$string['welcomep70'] = 'Klik tombol "Selanjutnya" di bawah untuk melanjutkan dengan penyiapan <strong> Moodle </strong>.';
+$string['welcomep50'] = 'Penggunaan semua aplikasi dalam paket ini diatur oleh lisensi masing-masing. Paket lengkap <strong>{$a->installername}</strong> adalah <a href="https://www.opensource.org/docs/definition_plain.html"> open source </a> dan didistribusikan di bawah lisensi <a href="https://www.gnu.org/copyleft/gpl.html">GPL</a>.';
+$string['welcomep60'] = 'Halaman berikut akan menuntun Anda melalui beberapa langkah yang mudah diikuti untuk mengonfigurasi dan menyiapkan <strong> Moodle </strong> di komputer Anda. Anda dapat menerima setelan bawaan atau, secara opsional, mengubahnya sesuai dengan kebutuhan Anda.';
+$string['welcomep70'] = 'Klik tombol "Selanjutnya" di bawah untuk melanjutkan instalasi <strong> Moodle </strong>.';
 $string['wwwroot'] = 'Alamat web';

@@ -99,11 +99,16 @@ class core_component {
         'MatthiasMullie\\Minify' => 'lib/minify/matthiasmullie-minify/src/',
         'MatthiasMullie\\PathConverter' => 'lib/minify/matthiasmullie-pathconverter/src/',
         'IMSGlobal\LTI' => 'lib/ltiprovider/src',
+        'Packback\\Lti1p3' => 'lib/lti1p3/src',
         'Phpml' => 'lib/mlbackend/php/phpml/src/Phpml',
         'PHPMailer\\PHPMailer' => 'lib/phpmailer/src',
         'RedeyeVentures\\GeoPattern' => 'lib/geopattern-php/GeoPattern',
         'MongoDB' => 'cache/stores/mongodb/MongoDB',
         'Firebase\\JWT' => 'lib/php-jwt/src',
+        'ZipStream' => 'lib/zipstream/src/',
+        'MyCLabs\\Enum' => 'lib/php-enum/src',
+        'Psr\\Http\\Message' => 'lib/http-message/src',
+        'PhpXmlRpc' => 'lib/phpxmlrpc',
     );
 
     /**
@@ -148,6 +153,38 @@ class core_component {
         if (!empty($file)) {
             require($file);
             return;
+        }
+
+        if (defined('PHPUNIT_TEST') && PHPUNIT_TEST) {
+            // For unit tests we support classes in `\frankenstyle_component\tests\` to be loaded from
+            // `path/to/frankenstyle/component/tests/classes` directory.
+            // Note: We do *not* support the legacy `\frankenstyle_component_tests_style_classnames`.
+            if ($component = self::get_component_from_classname($classname)) {
+                $pathoptions = [
+                    '/tests/classes' => "{$component}\\tests\\",
+                    '/tests/behat' => "{$component}\\behat\\",
+                ];
+                foreach ($pathoptions as $path => $testnamespace) {
+                    if (preg_match("#^" . preg_quote($testnamespace) . "#", $classname)) {
+                        $path = self::get_component_directory($component) . $path;
+                        $relativeclassname = str_replace(
+                            $testnamespace,
+                            '',
+                            $classname,
+                        );
+                        $file = sprintf(
+                            "%s/%s.php",
+                            $path,
+                            str_replace('\\', '/', $relativeclassname),
+                        );
+                        if (!empty($file) && file_exists($file)) {
+                            require($file);
+                            return;
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -213,7 +250,6 @@ class core_component {
 
         return $file;
     }
-
 
     /**
      * Initialise caches, always call before accessing self:: caches.
@@ -335,6 +371,17 @@ class core_component {
     }
 
     /**
+     * Reset the initialisation of the component utility.
+     *
+     * Note: It should not be necessary to call this in regular code.
+     * Please only use it where strictly required.
+     */
+    public static function reset(): void {
+        // The autoloader will re-initialise if plugintypes is null.
+        self::$plugintypes = null;
+    }
+
+    /**
      * Are we in developer debug mode?
      *
      * Note: You need to set "$CFG->debug = (E_ALL | E_STRICT);" in config.php,
@@ -440,7 +487,7 @@ $cache = '.var_export($cache, true).';
                     $path = $CFG->admin;
                 }
                 if (strpos($path, 'admin/') === 0) {
-                    $path = $CFG->admin . substr($path, 0, 5);
+                    $path = $CFG->admin . substr($path, 5);
                 }
             }
 
@@ -461,7 +508,7 @@ $cache = '.var_export($cache, true).';
         foreach (self::fetch_component_source('plugintypes') as $plugintype => $path) {
             // Replace admin/ with the config setting.
             if ($CFG->admin !== 'admin' && strpos($path, 'admin/') === 0) {
-                $path = $CFG->admin . substr($path, 0, 5);
+                $path = $CFG->admin . substr($path, 5);
             }
             $types[$plugintype] = "{$CFG->dirroot}/{$path}";
         }
@@ -549,7 +596,18 @@ $cache = '.var_export($cache, true).';
         $types = array();
         $subplugins = array();
         if (file_exists("$ownerdir/db/subplugins.json")) {
-            $subplugins = (array) json_decode(file_get_contents("$ownerdir/db/subplugins.json"))->plugintypes;
+            $subplugins = [];
+            $subpluginsjson = json_decode(file_get_contents("$ownerdir/db/subplugins.json"));
+            if (json_last_error() === JSON_ERROR_NONE) {
+                if (!empty($subpluginsjson->plugintypes)) {
+                    $subplugins = (array) $subpluginsjson->plugintypes;
+                } else {
+                    error_log("No plugintypes defined in $ownerdir/db/subplugins.json");
+                }
+            } else {
+                $jsonerror = json_last_error_msg();
+                error_log("$ownerdir/db/subplugins.json is invalid ($jsonerror)");
+            }
         } else if (file_exists("$ownerdir/db/subplugins.php")) {
             error_log('Use of subplugins.php has been deprecated. ' .
                 "Please update your '$ownerdir' plugin to provide a subplugins.json file instead.");
@@ -730,7 +788,7 @@ $cache = '.var_export($cache, true).';
     /**
      * List all core subsystems and their location
      *
-     * This is a whitelist of components that are part of the core and their
+     * This is a list of components that are part of the core and their
      * language strings are defined in /lang/en/<<subsystem>>.php. If a given
      * plugin is not listed here and it does not have proper plugintype prefix,
      * then it is considered as course activity module.
@@ -965,10 +1023,9 @@ $cache = '.var_export($cache, true).';
             }
             // Modules MUST NOT have any underscores,
             // component normalisation would break very badly otherwise!
-            return (bool)preg_match('/^[a-z][a-z0-9]*$/', $pluginname);
-
+            return !is_null($pluginname) && (bool) preg_match('/^[a-z][a-z0-9]*$/', $pluginname);
         } else {
-            return (bool)preg_match('/^[a-z](?:[a-z0-9_](?!__))*[a-z0-9]+$/', $pluginname);
+            return !is_null($pluginname) && (bool) preg_match('/^[a-z](?:[a-z0-9_](?!__))*[a-z0-9]+$/', $pluginname);
         }
     }
 
@@ -1021,6 +1078,35 @@ $cache = '.var_export($cache, true).';
         }
 
         return array($type, $plugin);
+    }
+
+    /**
+     * Fetch the component name from a Moodle PSR-like namespace.
+     *
+     * Note: Classnames in the flat underscore_class_name_format are not supported.
+     *
+     * @param string $classname
+     * @return null|string The component name, or null if a matching component was not found
+     */
+    public static function get_component_from_classname(string $classname): ?string {
+        $components = static::get_component_names(true);
+
+        $classname = ltrim($classname, '\\');
+
+        // Prefer PSR-4 classnames.
+        $parts = explode('\\', $classname);
+        if ($parts) {
+            $component = array_shift($parts);
+            if (array_search($component, $components) !== false) {
+                return $component;
+            }
+        }
+
+        // Note: Frankenstyle classnames are not supported as they lead to false positives, for example:
+        // \core_typo\example => \core instead of \core_typo because it does not exist
+        // Please *do not* add support for Frankenstyle classnames. They will break other things.
+
+        return null;
     }
 
     /**
@@ -1199,9 +1285,13 @@ $cache = '.var_export($cache, true).';
      * and the value is the new class name.
      * It is only included when we are populating the component cache. After that is not needed.
      *
-     * @param string $fulldir
+     * @param string|null $fulldir The directory to the renamed classes.
      */
-    protected static function load_renamed_classes($fulldir) {
+    protected static function load_renamed_classes(?string $fulldir) {
+        if (is_null($fulldir)) {
+            return;
+        }
+
         $file = $fulldir . '/db/renamedclasses.php';
         if (is_readable($file)) {
             $renamedclasses = null;
@@ -1249,18 +1339,16 @@ $cache = '.var_export($cache, true).';
     }
 
     /**
-     * Returns a list of frankenstyle component names.
+     * Returns a list of frankenstyle component names, including all plugins, subplugins, and subsystems.
      *
-     * E.g.
-     *  [
-     *      'core_course',
-     *      'core_message',
-     *      'mod_assign',
-     *      ...
-     *  ]
-     * @return array the list of frankenstyle component names.
+     * Note: By default the 'core' subsystem is not included.
+     *
+     * @param bool $includecore Whether to include the 'core' subsystem
+     * @return string[] the list of frankenstyle component names.
      */
-    public static function get_component_names() : array {
+    public static function get_component_names(
+        bool $includecore = false
+    ): array {
         $componentnames = [];
         // Get all plugins.
         foreach (self::get_plugin_types() as $plugintype => $typedir) {
@@ -1272,6 +1360,29 @@ $cache = '.var_export($cache, true).';
         foreach (self::get_core_subsystems() as $subsystemname => $subsystempath) {
             $componentnames[] = 'core_' . $subsystemname;
         }
+
+        if ($includecore) {
+            $componentnames[] = 'core';
+        }
+
         return $componentnames;
+    }
+
+    /**
+     * Checks for the presence of monologo icons within a plugin.
+     *
+     * Only checks monologo icons in PNG and SVG formats as they are
+     * formats that can have transparent background.
+     *
+     * @param string $plugintype The plugin type.
+     * @param string $pluginname The plugin name.
+     * @return bool True if the plugin has a monologo icon
+     */
+    public static function has_monologo_icon(string $plugintype, string $pluginname): bool {
+        $plugindir = core_component::get_plugin_directory($plugintype, $pluginname);
+        if ($plugindir === null) {
+            return false;
+        }
+        return file_exists("$plugindir/pix/monologo.svg") || file_exists("$plugindir/pix/monologo.png");
     }
 }

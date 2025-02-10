@@ -39,9 +39,9 @@ require_once($CFG->dirroot . '/question/type/numerical/question.php');
  */
 class qtype_calculated extends question_type {
     /**
-     * @const string a placeholder is a letter, followed by almost any characters. (This should probably be restricted more.)
+     * @const string a placeholder is a letter, followed by zero or more alphanum chars (as well as space, - and _ for readability).
      */
-    const PLACEHOLDER_REGEX_PART = '[[:alpha:]][^>} <`{"\']*';
+    const PLACEHOLDER_REGEX_PART = '[[:alpha:]][[:alpha:][:digit:]\-_\s]*';
 
     /**
      * @const string REGEXP for a placeholder, wrapped in its {...} delimiters, with capturing brackets around the name.
@@ -380,7 +380,7 @@ class qtype_calculated extends question_type {
                 require("{$CFG->dirroot}/question/type/calculated/datasetitems.php");
                 break;
             default:
-                print_error('invalidwizardpage', 'question');
+                throw new \moodle_exception('invalidwizardpage', 'question');
                 break;
         }
     }
@@ -412,7 +412,7 @@ class qtype_calculated extends question_type {
                         "{$submiturl}?wizardnow=datasetitems", $question, $regenerate);
                 break;
             default:
-                print_error('invalidwizardpage', 'question');
+                throw new \moodle_exception('invalidwizardpage', 'question');
                 break;
         }
 
@@ -640,23 +640,13 @@ class qtype_calculated extends question_type {
                     if (isset($form->synchronize) && $form->synchronize == 2) {
                         $this->addnamecategory($question);
                     }
-                } else if (!empty($form->makecopy)) {
+                } else {
                     $questionfromid =  $form->id;
                     $question = parent::save_question($question, $form);
                     // Prepare the datasets.
                     $this->preparedatasets($form, $questionfromid);
                     $form->id = $question->id;
                     $this->save_as_new_dataset_definitions($form, $questionfromid);
-                    if (isset($form->synchronize) && $form->synchronize == 2) {
-                        $this->addnamecategory($question);
-                    }
-                } else {
-                    // Editing a question.
-                    $question = parent::save_question($question, $form);
-                    // Prepare the datasets.
-                    $this->preparedatasets($form, $question->id);
-                    $form->id = $question->id;
-                    $this->save_dataset_definitions($form);
                     if (isset($form->synchronize) && $form->synchronize == 2) {
                         $this->addnamecategory($question);
                     }
@@ -685,7 +675,7 @@ class qtype_calculated extends question_type {
                 $this->save_question_calculated($question, $form);
                 break;
             default:
-                print_error('invalidwizardpage', 'question');
+                throw new \moodle_exception('invalidwizardpage', 'question');
                 break;
         }
         return $question;
@@ -1042,7 +1032,7 @@ class qtype_calculated extends question_type {
             return sprintf("%.".$regs[4].'f', $nbr);
 
         } else {
-            print_error('disterror', 'question', '', $regs[1]);
+            throw new \moodle_exception('disterror', 'question', '', $regs[1]);
         }
         return '';
     }
@@ -1476,7 +1466,7 @@ class qtype_calculated extends question_type {
             $a = new stdClass();
             $a->id = $question->id;
             $a->item = $datasetitem;
-            print_error('cannotgetdsfordependent', 'question', '', $a);
+            throw new \moodle_exception('cannotgetdsfordependent', 'question', '', $a);
         }
         $dataset = Array();
         foreach ($dataitems as $id => $dataitem) {
@@ -1759,13 +1749,10 @@ class qtype_calculated extends question_type {
                     $line++;
                     $text .= "<td align=\"left\" style=\"white-space:nowrap;\">{$questionname}</td>";
                     // TODO MDL-43779 should not have quiz-specific code here.
-                    $nbofquiz = $DB->count_records('quiz_slots', array('questionid' => $qu->id));
-                    $nbofattempts = $DB->count_records_sql("
-                            SELECT count(1)
-                              FROM {quiz_slots} slot
-                              JOIN {quiz_attempts} quiza ON quiza.quiz = slot.quizid
-                             WHERE slot.questionid = ?
-                               AND quiza.preview = 0", array($qu->id));
+                    $sql = 'SELECT COUNT(*) FROM (' . qbank_usage\helper::get_question_bank_usage_sql() . ') questioncount';
+                    $nbofquiz = $DB->count_records_sql($sql, [$qu->id, 'mod_quiz', 'slot']);
+                    $sql = 'SELECT COUNT(*) FROM (' . qbank_usage\helper::get_question_attempt_usage_sql() . ') attemptcount';
+                    $nbofattempts = $DB->count_records_sql($sql, [$qu->id]);
                     if ($nbofquiz > 0) {
                         $text .= "<td align=\"center\">{$nbofquiz}</td>";
                         $text .= "<td align=\"center\">{$nbofattempts}";
@@ -1857,6 +1844,9 @@ function qtype_calculated_calculate_answer($formula, $individualdata,
         // Something went wrong, so just return NaN.
         $calculated->answer = NAN;
         return $calculated;
+    } else if (is_nan($answer) || is_infinite($answer)) {
+        $calculated->answer = $answer;
+        return $calculated;
     }
     if ('1' == $answerformat) { // Answer is to have $answerlength decimals.
         // Decimal places.
@@ -1947,15 +1937,18 @@ function qtype_calculated_find_formula_errors($formula) {
     // Validates the formula submitted from the question edit page.
     // Returns false if everything is alright
     // otherwise it constructs an error message.
-    // Strip away dataset names. Use 1.0 to catch illegal concatenation like {a}{b}.
+    // Strip away dataset names. Use 1.0 to remove valid names, so illegal names can be identified later.
     $formula = preg_replace(qtype_calculated::PLACEHODLER_REGEX, '1.0', $formula);
 
     // Strip away empty space and lowercase it.
     $formula = strtolower(str_replace(' ', '', $formula));
 
-    $safeoperatorchar = '-+/*%>:^\~<?=&|!'; /* */
+    // Only mathematical operators are supported. Bitwise operators are not safe.
+    // Note: In this context, ^ is a bitwise operator (exponents are represented by **).
+    $safeoperatorchar = '-+/*%>:\~<?=!';
     $operatorornumber = "[{$safeoperatorchar}.0-9eE]";
 
+    // Validate mathematical functions in formula.
     while (preg_match("~(^|[{$safeoperatorchar},(])([a-z0-9_]*)" .
             "\\(({$operatorornumber}+(,{$operatorornumber}+((,{$operatorornumber}+)+)?)?)?\\)~",
             $formula, $regs)) {

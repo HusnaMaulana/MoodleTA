@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -30,22 +29,23 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['admindirname'] = 'Adminディレクトリ';
+$string['admindirname'] = 'adminディレクトリ';
 $string['availablelangs'] = '利用可能な言語パック';
 $string['chooselanguagehead'] = '言語を選択してください。';
-$string['chooselanguagesub'] = 'インストールにのみ使用する言語を選択してください。この言語はサイトのデフォルト言語としても使用されます。後でサイト言語を変更することができます。';
+$string['chooselanguagesub'] = 'インストールに使用する言語を選択してください。この言語はサイトのデフォルト言語としても使用されますが、後で変更もできます。';
 $string['clialreadyconfigured'] = '設定ファイルconfig.phpはすでに登録されています。このサイトをインストールする場合、admin/cli/install_database.phpを使用してください。';
 $string['clialreadyinstalled'] = '設定ファイルconfig.phpはすでに登録されています。このサイトをアップグレードする場合、admin/cli/upgrade.phpを使用してください。';
-$string['cliinstallheader'] = 'Moodle {$a} コマンドラインインストールプログラム';
-$string['databasehost'] = 'データベースホスト :';
-$string['databasename'] = 'データベース名 :';
+$string['cliinstallheader'] = 'Moodle {$a} コマンドラインインストレーションプログラム';
+$string['clitablesexist'] = 'データベーステーブルがすでに存在するため、CLIインストールを継続できません。';
+$string['databasehost'] = 'データベースホスト';
+$string['databasename'] = 'データベース名';
 $string['databasetypehead'] = 'データベースドライバを選択する';
 $string['dataroot'] = 'データディレクトリ';
 $string['datarootpermission'] = 'データディレクトリパーミッション';
 $string['dbprefix'] = 'テーブル接頭辞';
 $string['dirroot'] = 'Moodleディレクトリ';
 $string['environmenthead'] = 'あなたの環境を確認しています ...';
-$string['environmentsub2'] = 'それぞれのMoodleリリースにはPHPバージョンの最小必要条件および多くの必須PHP拡張モジュールがあります。完全な環境チェックはインストールおよびアップグレードごとに実行されます。新しいPHPバージョンのインストールまたはPHP拡張モジュールの有効化に関して分からない場合、あなたのサーバ管理者にご連絡ください。';
+$string['environmentsub2'] = 'それぞれのMoodleリリースにはPHPバージョンの最小必要条件および多くの必須PHP拡張モジュールがあります。完全な環境チェックはインストールおよびアップグレードごとに実行されます。新しいバージョンのインストールまたはPHP拡張モジュールの有効化に関して分からない場合、あなたのサーバ管理者にご連絡ください。';
 $string['errorsinenvironment'] = '環境チェックに失敗しました!';
 $string['installation'] = 'インストレーション';
 $string['langdownloaderror'] = '残念ですが、言語「 {$a} 」をダウンロードできませんでした。インストール処理は英語で継続されます。';
@@ -55,19 +55,19 @@ $string['memorylimithelp'] = '<p>現在、サーバのPHPメモリ制限が {$a}
 
 <p>可能でしたら、PHPのメモリ制限上限を40M以上に設定されることをお勧めします。この設定を実現するために、いくつかの方法があります:
 <ol>
-<li>あなたがリコンパイル可能な場合、PHPを<i>--enable-memory-limit</i>オプションでコンパイルしてください。これにより、Moodle自身がメモリ制限を設定することが可能になります。</li>
+<li>あなたがリコンパイル可能な場合、PHPを<i>--enable-memory-limit</i>オプションでコンパイルしてください。これでMoodle自身がメモリ制限を設定することが可能になります。</li>
 <li>あなたがphp.iniファイルにアクセスできる場合、<b>memory_limit</b>設定を40Mのように変更することができます。php.iniファイルにアクセスできない場合、管理者に変更を依頼してください。</li>
 <li>いくつかのPHPサーバでは以下の行を含む.htaccessファイルをMoodleディレクトリに作成することができます:
 <blockquote><div>php_value memory_limit 40M</div></blockquote>
 <p>しかし、この設定が<b>すべての</b>PHPページの動作を妨げる場合もあります。ページ閲覧中にエラーが表示される場合、.htaccessファイルを削除してください。</p></li>
 </ol>';
 $string['paths'] = 'パス';
-$string['pathserrcreatedataroot'] = 'データディレクトリ ({$a->dataroot}) はインストーラーで作成できません。';
+$string['pathserrcreatedataroot'] = 'データディレクトリ ({$a->dataroot}) はインストーラで作成できません。';
 $string['pathshead'] = 'パスを確認する';
 $string['pathsrodataroot'] = 'datarootディレクトリに書き込み権がありません。';
-$string['pathsroparentdataroot'] = '親ディレクトリ ({$a->parent}) に書き込み権がありません。データディレクトリ ({$a->dataroot}) はインストーラーで作成できません。';
+$string['pathsroparentdataroot'] = '親ディレクトリ ({$a->parent}) に書き込み権がありません。データディレクトリ ({$a->dataroot}) はインストーラで作成できません。';
 $string['pathssubadmindir'] = 'まれに、コントロールパネルまたはその他の管理ツールにアクセスするためのURLとして/adminディレクトリを使用しているウェブホストがあります。残念ですが、これはMoodle管理ページの標準的なロケーションと衝突します。あなたはインストール時にadminディレクトリをリネームすることができます。ここに新しいディレクトリ名を入力してください。例: <br /> <br /><b>moodleadmin</b><br /> <br />
-これによりMoodleでのadminへのリンクを変更します。';
+これでMoodleでのadminへのリンクを変更します。';
 $string['pathssubdataroot'] = '<p>ユーザによってアップロードされたファイルコンテンツすべてをMoodleが保存するディレクトリです。</p>
 <p>このディレクトリはウェブサーバユーザ (通常「nobody」または「apache」) から読み込みおよび書き込みできる必要があります。</p>
 <p>ウェブからは直接アクセスできないようにしてください。</p>

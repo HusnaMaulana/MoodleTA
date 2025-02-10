@@ -27,12 +27,16 @@
 
 require_once(__DIR__ . '/../../behat/behat_base.php');
 
-use Behat\Mink\Exception\ExpectationException as ExpectationException,
-    Behat\Mink\Exception\ElementNotFoundException as ElementNotFoundException,
-    Behat\Mink\Exception\DriverException as DriverException,
-    WebDriver\Exception\NoSuchElement as NoSuchElement,
-    WebDriver\Exception\StaleElementReference as StaleElementReference,
-    Behat\Gherkin\Node\TableNode as TableNode;
+use Behat\Gherkin\Node\TableNode;
+use Behat\Mink\Element\NodeElement;
+use Behat\Mink\Exception\DriverException;
+use Behat\Mink\Exception\ElementNotFoundException;
+use Behat\Mink\Exception\ExpectationException;
+use Facebook\WebDriver\Exception\NoSuchAlertException;
+use Facebook\WebDriver\Exception\NoSuchElementException;
+use Facebook\WebDriver\Exception\StaleElementReferenceException;
+use Facebook\WebDriver\WebDriverAlert;
+use Facebook\WebDriver\WebDriverExpectedCondition;
 
 /**
  * Cross component steps definitions.
@@ -74,7 +78,7 @@ class behat_general extends behat_base {
      * @Given /^I am on homepage$/
      */
     public function i_am_on_homepage() {
-        $this->getSession()->visit($this->locate_path('/'));
+        $this->execute('behat_general::i_visit', ['/']);
     }
 
     /**
@@ -83,7 +87,7 @@ class behat_general extends behat_base {
      * @Given /^I am on site homepage$/
      */
     public function i_am_on_site_homepage() {
-        $this->getSession()->visit($this->locate_path('/?redirect=0'));
+        $this->execute('behat_general::i_visit', ['/?redirect=0']);
     }
 
     /**
@@ -92,7 +96,7 @@ class behat_general extends behat_base {
      * @Given /^I am on course index$/
      */
     public function i_am_on_course_index() {
-        $this->getSession()->visit($this->locate_path('/course/index.php'));
+        $this->execute('behat_general::i_visit', ['/course/index.php']);
     }
 
     /**
@@ -121,9 +125,9 @@ class behat_general extends behat_base {
         // Wrapped in try & catch in case the redirection has already been executed.
         try {
             $content = $metarefresh->getAttribute('content');
-        } catch (NoSuchElement $e) {
+        } catch (NoSuchElementException $e) {
             return true;
-        } catch (StaleElementReference $e) {
+        } catch (StaleElementReferenceException $e) {
             return true;
         }
 
@@ -147,7 +151,7 @@ class behat_general extends behat_base {
 
         } else if (!empty($url)) {
             // We redirect directly as we can not wait for an automatic redirection.
-            $this->getSession()->getDriver()->getClient()->request('get', $url);
+            $this->getSession()->getDriver()->getClient()->request('GET', $url);
 
         } else {
             // Reload the page if no URL was provided.
@@ -159,49 +163,30 @@ class behat_general extends behat_base {
      * Switches to the specified iframe.
      *
      * @Given /^I switch to "(?P<iframe_name_string>(?:[^"]|\\")*)" iframe$/
-     * @param string $iframename
-     */
-    public function switch_to_iframe($iframename) {
-
-        // We spin to give time to the iframe to be loaded.
-        // Using extended timeout as we don't know about which
-        // kind of iframe will be loaded.
-        $this->spin(
-            function($context, $iframename) {
-                $context->getSession()->switchToIFrame($iframename);
-
-                // If no exception we are done.
-                return true;
-            },
-            $iframename,
-            behat_base::get_extended_timeout()
-        );
-    }
-
-    /**
-     * Switches to the iframe containing specified class.
-     *
      * @Given /^I switch to "(?P<iframe_name_string>(?:[^"]|\\")*)" class iframe$/
-     * @param string $classname
+     * @param string $name The name of the iframe
      */
-    public function switch_to_class_iframe($classname) {
+    public function switch_to_iframe($name) {
         // We spin to give time to the iframe to be loaded.
         // Using extended timeout as we don't know about which
         // kind of iframe will be loaded.
         $this->spin(
-            function($context, $classname) {
-                $iframe = $this->find('iframe', $classname);
-                if (!empty($iframe->getAttribute('id'))) {
-                    $iframename = $iframe->getAttribute('id');
-                } else {
+            function($context) use ($name){
+                $iframe = $context->find('iframe', $name);
+                if ($iframe->hasAttribute('name')) {
                     $iframename = $iframe->getAttribute('name');
+                } else {
+                    if (!$this->running_javascript()) {
+                        throw new \coding_exception('iframe must have a name attribute to use the switchTo command.');
+                    }
+                    $iframename = uniqid();
+                    $this->execute_js_on_node($iframe, "{{ELEMENT}}.name = '{$iframename}';");
                 }
                 $context->getSession()->switchToIFrame($iframename);
 
                 // If no exception we are done.
                 return true;
             },
-            $classname,
             behat_base::get_extended_timeout()
         );
     }
@@ -218,29 +203,42 @@ class behat_general extends behat_base {
     /**
      * Switches to the specified window. Useful when interacting with popup windows.
      *
-     * @Given /^I switch to "(?P<window_name_string>(?:[^"]|\\")*)" window$/
+     * @Given /^I switch to "(?P<window_name_string>(?:[^"]|\\")*)" (window|tab)$/
      * @param string $windowname
      */
     public function switch_to_window($windowname) {
-        // In Behat, some browsers (e.g. Chrome) are unable to switch to a
-        // window without a name, and by default the main browser window does
-        // not have a name. To work-around this, when we switch away from an
-        // unnamed window (presumably the main window) to some other named
-        // window, then we first set the main window name to a conventional
-        // value that we can later use this name to switch back.
-        $this->getSession()->executeScript(
-                'if (window.name == "") window.name = "' . self::MAIN_WINDOW_NAME . '"');
+        if ($windowname === self::MAIN_WINDOW_NAME) {
+            // When switching to the main window normalise the window name to null.
+            // This is normalised further in the Mink driver to the root window ID.
+            $windowname = null;
+        }
 
         $this->getSession()->switchToWindow($windowname);
     }
 
     /**
+     * Switches to a second window.
+     *
+     * @Given /^I switch to a second window$/
+     * @throws DriverException If there aren't exactly 2 windows open.
+     */
+    public function switch_to_second_window() {
+        $names = $this->getSession()->getWindowNames();
+
+        if (count($names) !== 2) {
+            throw new DriverException('Expected to see 2 windows open, found ' . count($names));
+        }
+
+        $this->getSession()->switchToWindow($names[1]);
+    }
+
+    /**
      * Switches to the main Moodle window. Useful when you finish interacting with popup windows.
      *
-     * @Given /^I switch to the main window$/
+     * @Given /^I switch to the main (window|tab)$/
      */
     public function switch_to_the_main_window() {
-        $this->getSession()->switchToWindow(self::MAIN_WINDOW_NAME);
+        $this->switch_to_window(self::MAIN_WINDOW_NAME);
     }
 
     /**
@@ -258,7 +256,7 @@ class behat_general extends behat_base {
         $names = $this->getSession()->getWindowNames();
         for ($index = 1; $index < count($names); $index ++) {
             $this->getSession()->switchToWindow($names[$index]);
-            $this->getSession()->executeScript("window.open('', '_self').close();");
+            $this->execute_script("window.open('', '_self').close();");
         }
         $names = $this->getSession()->getWindowNames();
         if (count($names) !== 1) {
@@ -268,11 +266,24 @@ class behat_general extends behat_base {
     }
 
     /**
+     * Wait for an alert to be displayed.
+     *
+     * @return WebDriverAlert
+     */
+    public function wait_for_alert(): WebDriverAlert {
+        $webdriver = $this->getSession()->getDriver()->getWebdriver();
+        $webdriver->wait()->until(WebDriverExpectedCondition::alertIsPresent());
+
+        return $webdriver->switchTo()->alert();
+    }
+
+    /**
      * Accepts the currently displayed alert dialog. This step does not work in all the browsers, consider it experimental.
      * @Given /^I accept the currently displayed dialog$/
      */
     public function accept_currently_displayed_alert_dialog() {
-        $this->getSession()->getDriver()->getWebDriverSession()->accept_alert();
+        $alert = $this->wait_for_alert();
+        $alert->accept();
     }
 
     /**
@@ -280,7 +291,8 @@ class behat_general extends behat_base {
      * @Given /^I dismiss the currently displayed dialog$/
      */
     public function dismiss_currently_displayed_alert_dialog() {
-        $this->getSession()->getDriver()->getWebDriverSession()->dismiss_alert();
+        $alert = $this->wait_for_alert();
+        $alert->dismiss();
     }
 
     /**
@@ -291,9 +303,7 @@ class behat_general extends behat_base {
      * @param string $link
      */
     public function click_link($link) {
-
         $linknode = $this->find_link($link);
-        $this->ensure_node_is_visible($linknode);
         $linknode->click();
     }
 
@@ -368,9 +378,25 @@ class behat_general extends behat_base {
      * @param string $selectortype The type of what we look for
      */
     public function i_hover($element, $selectortype) {
-
         // Gets the node based on the requested selector type and locator.
         $node = $this->get_selected_node($selectortype, $element);
+        $this->execute_js_on_node($node, '{{ELEMENT}}.scrollIntoView();');
+        $node->mouseOver();
+    }
+
+    /**
+     * Generic mouse over action. Mouse over a element of the specified type.
+     *
+     * @When /^I hover over the "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*) in the "(?P<container_element_string>(?:[^"]|\\")*)" "(?P<container_selector_string>[^"]*)"$/
+     * @param string $element Element we look for
+     * @param string $selectortype The type of what we look for
+     * @param string $containerelement Element we look for
+     * @param string $containerselectortype The type of what we look for
+     */
+    public function i_hover_in_the(string $element, $selectortype, string $containerelement, $containerselectortype): void {
+        // Gets the node based on the requested selector type and locator.
+        $node = $this->get_node_in_container($selectortype, $element, $containerselectortype, $containerselectortype);
+        $this->execute_js_on_node($node, '{{ELEMENT}}.scrollIntoView();');
         $node->mouseOver();
     }
 
@@ -382,11 +408,8 @@ class behat_general extends behat_base {
      * @param string $selectortype The type of what we look for
      */
     public function i_click_on($element, $selectortype) {
-
         // Gets the node based on the requested selector type and locator.
-        $node = $this->get_selected_node($selectortype, $element);
-        $this->ensure_node_is_visible($node);
-        $node->click();
+        $this->get_selected_node($selectortype, $element)->click();
     }
 
     /**
@@ -419,7 +442,8 @@ class behat_general extends behat_base {
      */
     public function i_click_on_confirming_the_dialogue($element, $selectortype) {
         $this->i_click_on($element, $selectortype);
-        $this->accept_currently_displayed_alert_dialog();
+        $this->execute('behat_general::accept_currently_displayed_alert_dialog', []);
+        $this->wait_until_the_page_is_ready();
     }
 
     /**
@@ -432,7 +456,8 @@ class behat_general extends behat_base {
      */
     public function i_click_on_dismissing_the_dialogue($element, $selectortype) {
         $this->i_click_on($element, $selectortype);
-        $this->dismiss_currently_displayed_alert_dialog();
+        $this->execute('behat_general::dismiss_currently_displayed_alert_dialog', []);
+        $this->wait_until_the_page_is_ready();
     }
 
     /**
@@ -445,10 +470,56 @@ class behat_general extends behat_base {
      * @param string $nodeselectortype The type of selector where we look in
      */
     public function i_click_on_in_the($element, $selectortype, $nodeelement, $nodeselectortype) {
+        $node = $this->get_node_in_container($selectortype, $element, $nodeselectortype, $nodeelement);
+        $node->click();
+    }
+
+    /**
+     * Click on the element with some modifier key pressed (alt, shift, meta or control).
+     *
+     * It is important to note that not all HTML elements are compatible with this step because
+     * the webdriver limitations. For example, alt click on checkboxes with a visible label will
+     * produce a normal checkbox click without the modifier.
+     *
+     * @When I :modifier click on :element :selectortype in the :nodeelement :nodeselectortype
+     * @param string $modifier the extra modifier to press (for example, alt+shift or shift)
+     * @param string $element Element we look for
+     * @param string $selectortype The type of what we look for
+     * @param string $nodeelement Element we look in
+     * @param string $nodeselectortype The type of selector where we look in
+     */
+    public function i_key_click_on_in_the($modifier, $element, $selectortype, $nodeelement, $nodeselectortype) {
+        behat_base::require_javascript_in_session($this->getSession());
+
+        $key = null;
+        switch (strtoupper(trim($modifier))) {
+            case '':
+                break;
+            case 'SHIFT':
+                $key = behat_keys::SHIFT;
+                break;
+            case 'CTRL':
+                $key = behat_keys::CONTROL;
+                break;
+            case 'ALT':
+                $key = behat_keys::ALT;
+                break;
+            case 'META':
+                $key = behat_keys::META;
+                break;
+            default:
+                throw new \coding_exception("Unknown modifier key '$modifier'}");
+        }
 
         $node = $this->get_node_in_container($selectortype, $element, $nodeselectortype, $nodeelement);
-        $this->ensure_node_is_visible($node);
+
+        // KeyUP and KeyDown require the element to be displayed in the current window.
+        $this->execute_js_on_node($node, '{{ELEMENT}}.scrollIntoView();');
+        $node->keyDown($key);
         $node->click();
+        // Any click action can move the scroll. Ensure the element is still displayed.
+        $this->execute_js_on_node($node, '{{ELEMENT}}.scrollIntoView();');
+        $node->keyUp($key);
     }
 
     /**
@@ -681,7 +752,7 @@ class behat_general extends behat_base {
                             throw new ExpectationException('"' . $args['text'] . '" text was found in the page',
                                 $context->getSession());
                         }
-                    } catch (WebDriver\Exception\NoSuchElement $e) {
+                    } catch (NoSuchElementException $e) {
                         // Do nothing just return, as element is no more on page.
                         return true;
                     } catch (ElementNotFoundException $e) {
@@ -924,7 +995,7 @@ class behat_general extends behat_base {
     return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
 })()
 EOF;
-            $ok = $this->getSession()->getDriver()->evaluateScript($js);
+            $ok = $this->evaluate_script($js);
         } else {
 
             // Using following xpath axe to find it.
@@ -946,13 +1017,7 @@ EOF;
      * @param string $selectortype The type of element where we are looking in.
      */
     public function the_element_should_be_disabled($element, $selectortype) {
-
-        // Transforming from steps definitions selector/locator format to Mink format and getting the NodeElement.
-        $node = $this->get_selected_node($selectortype, $element);
-
-        if (!$node->hasAttribute('disabled')) {
-            throw new ExpectationException('The element "' . $element . '" is not disabled', $this->getSession());
-        }
+        $this->the_attribute_of_should_be_set("disabled", $element, $selectortype, false);
     }
 
     /**
@@ -964,13 +1029,7 @@ EOF;
      * @param string $selectortype The type of where we look
      */
     public function the_element_should_be_enabled($element, $selectortype) {
-
-        // Transforming from steps definitions selector/locator format to mink format and getting the NodeElement.
-        $node = $this->get_selected_node($selectortype, $element);
-
-        if ($node->hasAttribute('disabled')) {
-            throw new ExpectationException('The element "' . $element . '" is not enabled', $this->getSession());
-        }
+        $this->the_attribute_of_should_be_set("disabled", $element, $selectortype, true);
     }
 
     /**
@@ -982,12 +1041,7 @@ EOF;
      * @param string $selectortype The type of element where we are looking in.
      */
     public function the_element_should_be_readonly($element, $selectortype) {
-        // Transforming from steps definitions selector/locator format to Mink format and getting the NodeElement.
-        $node = $this->get_selected_node($selectortype, $element);
-
-        if (!$node->hasAttribute('readonly')) {
-            throw new ExpectationException('The element "' . $element . '" is not readonly', $this->getSession());
-        }
+        $this->the_attribute_of_should_be_set("readonly", $element, $selectortype, false);
     }
 
     /**
@@ -999,12 +1053,7 @@ EOF;
      * @param string $selectortype The type of element where we are looking in.
      */
     public function the_element_should_not_be_readonly($element, $selectortype) {
-        // Transforming from steps definitions selector/locator format to Mink format and getting the NodeElement.
-        $node = $this->get_selected_node($selectortype, $element);
-
-        if ($node->hasAttribute('readonly')) {
-            throw new ExpectationException('The element "' . $element . '" is readonly', $this->getSession());
-        }
+        $this->the_attribute_of_should_be_set("readonly", $element, $selectortype, true);
     }
 
     /**
@@ -1042,7 +1091,7 @@ EOF;
             // Using the spin method as we want a reduced timeout but there is no need for a 0.1 seconds interval
             // because in the optimistic case we will timeout.
             // If all goes good it will throw an ElementNotFoundExceptionn that we will catch.
-            return $this->find($selectortype, $element, $exception, false, behat_base::get_reduced_timeout());
+            $this->find($selectortype, $element, $exception, false, behat_base::get_reduced_timeout());
         } catch (ElementNotFoundException $e) {
             // We expect the element to not be found.
             return;
@@ -1053,12 +1102,51 @@ EOF;
     }
 
     /**
+     * Ensure that edit mode is (not) available on the current page.
+     *
+     * @Then edit mode should be available on the current page
+     * @Then edit mode should :not be available on the current page
+     * @param bool $not
+     */
+    public function edit_mode_should_be_available(bool $not = false): void {
+        $isavailable = $this->is_edit_mode_available();
+        $shouldbeavailable = empty($not);
+
+        if ($isavailable && !$shouldbeavailable) {
+            throw new ExpectationException("Edit mode is available and should not be", $this->getSession());
+        } else if ($shouldbeavailable && !$isavailable) {
+            throw new ExpectationException("Edit mode is not available and should be", $this->getSession());
+        }
+    }
+
+    /**
+     * Check whether edit mode is available on the current page.
+     *
+     * @return bool
+     */
+    public function is_edit_mode_available(): bool {
+        // If the course is already in editing mode then it will have the class 'editing' on the body.
+        // This is a 'cheap' way of telling if the course is in editing mode and therefore if edit mode is available.
+        $body = $this->find('css', 'body');
+        if ($body->hasClass('editing')) {
+            return true;
+        }
+
+        try {
+            $this->find('field', get_string('editmode'), false, false, 0);
+            return true;
+        } catch (ElementNotFoundException $e) {
+            return false;
+        }
+    }
+
+    /**
      * This step triggers cron like a user would do going to admin/cron.php.
      *
      * @Given /^I trigger cron$/
      */
     public function i_trigger_cron() {
-        $this->getSession()->visit($this->locate_path('/admin/cron.php'));
+        $this->execute('behat_general::i_visit', ['/admin/cron.php']);
     }
 
     /**
@@ -1072,7 +1160,7 @@ EOF;
      * the Behat result look ugly.
      *
      * Note: Most of the code relating to running a task is based on
-     * admin/tool/task/cli/schedule_task.php.
+     * admin/cli/scheduled_task.php.
      *
      * @Given /^I run the scheduled task "(?P<task_name>[^"]+)"$/
      * @param string $taskname Name of task e.g. 'mod_whatever\task\do_something'
@@ -1188,19 +1276,12 @@ EOF;
      * @throws ElementNotFoundException Thrown by behat_base::find
      * @param string $element The locator of the specified selector
      * @param string $selectortype The selector type
-     * @param string $containerelement The container selector type
-     * @param string $containerselectortype The container locator
+     * @param NodeElement|string $containerelement The locator of the container selector
+     * @param string $containerselectortype The container selector type
      */
     public function should_exist_in_the($element, $selectortype, $containerelement, $containerselectortype) {
-        // Get the container node.
-        $containernode = $this->find($containerselectortype, $containerelement);
-
-        // Specific exception giving info about where can't we find the element.
-        $locatorexceptionmsg = "{$element} in the {$containerelement} {$containerselectortype}";
-        $exception = new ElementNotFoundException($this->getSession(), $selectortype, null, $locatorexceptionmsg);
-
-        // Looks for the requested node inside the container node.
-        $this->find($selectortype, $element, $exception, $containernode);
+        // Will throw an ElementNotFoundException if it does not exist.
+        $this->get_node_in_container($selectortype, $element, $containerselectortype, $containerelement);
     }
 
     /**
@@ -1212,8 +1293,8 @@ EOF;
      * @throws ExpectationException
      * @param string $element The locator of the specified selector
      * @param string $selectortype The selector type
-     * @param string $containerelement The container selector type
-     * @param string $containerselectortype The container locator
+     * @param NodeElement|string $containerelement The locator of the container selector
+     * @param string $containerselectortype The container selector type
      */
     public function should_not_exist_in_the($element, $selectortype, $containerelement, $containerselectortype) {
         // Get the container node.
@@ -1230,26 +1311,79 @@ EOF;
         }
 
         // The element was found and should not have been. Throw an exception.
+        $elementdescription = $this->get_selector_description($selectortype, $element);
+        $containerdescription = $this->get_selector_description($containerselectortype, $containerelement);
         throw new ExpectationException(
-            "The '{$element}' '{$selectortype}' exists in the '{$containerelement}' '{$containerselectortype}'",
+            "The {$elementdescription} exists in the {$containerdescription}",
             $this->getSession()
         );
     }
 
     /**
-     * Change browser window size small: 640x480, medium: 1024x768, large: 2560x1600, custom: widthxheight
+     * Change browser window size
+     *
+     * Allowed sizes:
+     * - mobile: 425x750
+     * - tablet: 768x1024
+     * - small: 1024x768
+     * - medium: 1366x768
+     * - large: 2560x1600
+     * - custom: widthxheight
      *
      * Example: I change window size to "small" or I change window size to "1024x768"
      * or I change viewport size to "800x600". The viewport option is useful to guarantee that the
      * browser window has same viewport size even when you run Behat on multiple operating systems.
      *
      * @throws ExpectationException
-     * @Then /^I change (window|viewport) size to "(small|medium|large|\d+x\d+)"$/
-     * @Then /^I change the (window|viewport) size to "(small|medium|large|\d+x\d+)"$/
-     * @param string $windowsize size of the window (small|medium|large|wxh).
+     * @Then /^I change (window|viewport) size to "(mobile|tablet|small|medium|large|\d+x\d+)"( without runtime scaling)?$/
+     * @Then /^I change the (window|viewport) size to "(mobile|tablet|small|medium|large|\d+x\d+)"( without runtime scaling)?$/
+     * @param string $windowviewport Whether this is a window or viewport size hcange
+     * @param string $windowsize size of the window (mobile|tablet|small|medium|large|wxh).
+     * @param null|string $scale whether to lock runtime scaling (string) or to allow it (null)
      */
-    public function i_change_window_size_to($windowviewport, $windowsize) {
-        $this->resize_window($windowsize, $windowviewport === 'viewport');
+    public function i_change_window_size_to(
+        $windowviewport,
+        $windowsize,
+        ?string $scale = null
+    ): void {
+        $this->resize_window(
+            $windowsize,
+            $windowviewport === 'viewport',
+            $scale === null,
+        );
+    }
+
+    /**
+     * Checks whether there the specified attribute is set or not.
+     *
+     * @Then the :attribute attribute of :element :selectortype should be set
+     * @Then the :attribute attribute of :element :selectortype should :not be set
+     *
+     * @throws ExpectationException
+     * @param string $attribute Name of attribute
+     * @param string $element The locator of the specified selector
+     * @param string $selectortype The selector type
+     * @param string $not
+     */
+    public function the_attribute_of_should_be_set($attribute, $element, $selectortype, $not = null) {
+        // Get the container node (exception if it doesn't exist).
+        $containernode = $this->get_selected_node($selectortype, $element);
+        $hasattribute = $containernode->hasAttribute($attribute);
+
+        if ($not && $hasattribute) {
+            $value = $containernode->getAttribute($attribute);
+            // Should not be set but is.
+            throw new ExpectationException(
+                "The attribute \"{$attribute}\" should not be set but has a value of '{$value}'",
+                $this->getSession()
+            );
+        } else if (!$not && !$hasattribute) {
+            // Should be set but is not.
+            throw new ExpectationException(
+                "The attribute \"{$attribute}\" should be set but is not",
+                $this->getSession()
+            );
+        }
     }
 
     /**
@@ -1316,37 +1450,14 @@ EOF;
 
         $rowliteral = behat_context_helper::escape($row);
         $valueliteral = behat_context_helper::escape($value);
-        $columnliteral = behat_context_helper::escape($column);
 
-        if (preg_match('/^-?(\d+)-?$/', $column, $columnasnumber)) {
-            // Column indicated as a number, just use it as position of the column.
-            $columnpositionxpath = "/child::*[position() = {$columnasnumber[1]}]";
-        } else {
-            // Header can be in thead or tbody (first row), following xpath should work.
-            $theadheaderxpath = "thead/tr[1]/th[(normalize-space(.)=" . $columnliteral . " or a[normalize-space(text())=" .
-                    $columnliteral . "] or div[normalize-space(text())=" . $columnliteral . "])]";
-            $tbodyheaderxpath = "tbody/tr[1]/td[(normalize-space(.)=" . $columnliteral . " or a[normalize-space(text())=" .
-                    $columnliteral . "] or div[normalize-space(text())=" . $columnliteral . "])]";
-
-            // Check if column exists.
-            $columnheaderxpath = $tablexpath . "[" . $theadheaderxpath . " | " . $tbodyheaderxpath . "]";
-            $columnheader = $this->getSession()->getDriver()->find($columnheaderxpath);
-            if (empty($columnheader)) {
-                $columnexceptionmsg = $column . '" in table "' . $table . '"';
-                throw new ElementNotFoundException($this->getSession(), "\n$columnheaderxpath\n\n".'Column', null, $columnexceptionmsg);
-            }
-            // Following conditions were considered before finding column count.
-            // 1. Table header can be in thead/tr/th or tbody/tr/td[1].
-            // 2. First column can have th (Gradebook -> user report), so having lenient sibling check.
-            $columnpositionxpath = "/child::*[position() = count(" . $tablexpath . "/" . $theadheaderxpath .
-                "/preceding-sibling::*) + 1]";
-        }
+        $columnpositionxpath = $this->get_table_column_xpath($table, $column);
 
         // Check if value exists in specific row/column.
         // Get row xpath.
         // GoutteDriver uses DomCrawler\Crawler and it is making XPath relative to the current context, so use descendant.
-        $rowxpath = $tablexpath."/tbody/tr[descendant::th[normalize-space(.)=" . $rowliteral .
-                    "] | descendant::td[normalize-space(.)=" . $rowliteral . "]]";
+        $rowxpath = $tablexpath . "/tbody/tr[descendant::*[@class='rowtitle'][normalize-space(.)=" . $rowliteral . "] | " . "
+            descendant::th[normalize-space(.)=" . $rowliteral . "] | descendant::td[normalize-space(.)=" . $rowliteral . "]]";
 
         $columnvaluexpath = $rowxpath . $columnpositionxpath . "[contains(normalize-space(.)," . $valueliteral . ")]";
 
@@ -1383,6 +1494,99 @@ EOF;
     }
 
     /**
+     * Get xpath for a row child that corresponds to the specified column header
+     *
+     * @param string $table table identifier that can be used with 'table' node selector (i.e. table title or CSS class)
+     * @param string $column either text in the column header or the column number, such as -1-, -2-, etc
+     *      When matching the column header it has to be either exact match of the whole header or an exact
+     *      match of a text inside a link in the header.
+     *      For example, to match "<a>First name</a> / <a>Last name</a>" you need to specify either "First name" or "Last name"
+     * @return string
+     */
+    protected function get_table_column_xpath(string $table, string $column): string {
+        $tablenode = $this->get_selected_node('table', $table);
+        $tablexpath = $tablenode->getXpath();
+        $columnliteral = behat_context_helper::escape($column);
+        if (preg_match('/^-?(\d+)-?$/', $column, $columnasnumber)) {
+            // Column indicated as a number, just use it as position of the column.
+            $columnpositionxpath = "/child::*[position() = {$columnasnumber[1]}]";
+        } else {
+            // Header can be in thead or tbody (first row), following xpath should work.
+            $theadheaderxpath = "thead/tr[1]/th[(normalize-space(.)={$columnliteral} or a[normalize-space(text())=" .
+                    $columnliteral . "] or div[normalize-space(text())={$columnliteral}])]";
+            $tbodyheaderxpath = "tbody/tr[1]/td[(normalize-space(.)={$columnliteral} or a[normalize-space(text())=" .
+                    $columnliteral . "] or div[normalize-space(text())={$columnliteral}])]";
+
+            // Check if column exists.
+            $columnheaderxpath = "{$tablexpath}[{$theadheaderxpath} | {$tbodyheaderxpath}]";
+            $columnheader = $this->getSession()->getDriver()->find($columnheaderxpath);
+            if (empty($columnheader)) {
+                if (strpos($column, '/') !== false) {
+                    // We are not able to match headers consisting of several links, such as "First name / Last name".
+                    // Instead we can match "First name" or "Last name" or "-1-" (column number).
+                    throw new Exception("Column matching locator \"$column\" not found. ".
+                        "If the column header contains multiple links, specify only one of the link texts. ".
+                        "Otherwise, use the column number as the locator");
+                }
+                $columnexceptionmsg = $column . '" in table "' . $table . '"';
+                throw new ElementNotFoundException($this->getSession(), "\n$columnheaderxpath\n\n".'Column',
+                    null, $columnexceptionmsg);
+            }
+            // Following conditions were considered before finding column count.
+            // 1. Table header can be in thead/tr/th or tbody/tr/td[1].
+            // 2. First column can have th (Gradebook -> user report), so having lenient sibling check.
+            $columnpositionxpath = "/child::*[position() = count({$tablexpath}/{$theadheaderxpath}" .
+                "/preceding-sibling::*) + 1]";
+        }
+        return $columnpositionxpath;
+    }
+
+    /**
+     * Find a table row where each of the specified columns matches and throw exception if not found
+     *
+     * @param string $table table locator
+     * @param array $cells key is the column locator (name or index such as '-1-') and value is the text contents of the table cell
+     */
+    protected function ensure_table_row_exists(string $table, array $cells): void {
+        $tablenode = $this->get_selected_node('table', $table);
+        $tablexpath = $tablenode->getXpath();
+
+        $columnconditions = [];
+        foreach ($cells as $columnname => $value) {
+            $valueliteral = behat_context_helper::escape($value);
+            $columnpositionxpath = $this->get_table_column_xpath($table, $columnname);
+            $columnconditions[] = '.' . $columnpositionxpath . "[contains(normalize-space(.)," . $valueliteral . ")]";
+        }
+        $rowxpath = $tablexpath . "/tbody/tr[" . join(' and ', $columnconditions) . ']';
+
+        $rownode = $this->getSession()->getDriver()->find($rowxpath);
+        if (empty($rownode)) {
+            $rowlocator = array_map(fn($k) => "{$k} => {$cells[$k]}", array_keys($cells));
+            throw new ElementNotFoundException($this->getSession(), "\n$rowxpath\n\n".'Table row', null, join(', ', $rowlocator));
+        }
+    }
+
+    /**
+     * Find a table row where each of the specified columns matches and throw exception if found
+     *
+     * @param string $table table locator
+     * @param array $cells key is the column locator (name or index such as '-1-') and value is the text contents of the table cell
+     */
+    protected function ensure_table_row_does_not_exist(string $table, array $cells): void {
+        try {
+            $this->ensure_table_row_exists($table, $cells);
+            // Throw exception if found.
+        } catch (ElementNotFoundException $e) {
+            // Table row/column doesn't contain this value. Nothing to do.
+            return;
+        }
+        $rowlocator = array_map(fn($k) => "{$k} => {$cells[$k]}", array_keys($cells));
+        throw new ExpectationException('Table row "' . join(', ', $rowlocator) .
+            '" is present in the table "' . $table . '"', $this->getSession()
+        );
+    }
+
+    /**
      * Checks that the provided value exist in table.
      *
      * First row may contain column headers or numeric indexes of the columns
@@ -1398,21 +1602,21 @@ EOF;
      */
     public function following_should_exist_in_the_table($table, TableNode $data) {
         $datahash = $data->getHash();
+        if ($datahash && count($data->getRow(0)) != count($datahash[0])) {
+            // Check that the number of columns in the hash is the same as the number of the columns in the first row.
+            throw new coding_exception('Table contains duplicate column headers');
+        }
 
         foreach ($datahash as $row) {
-            $firstcell = null;
-            foreach ($row as $column => $value) {
-                if ($firstcell === null) {
-                    $firstcell = $value;
-                } else {
-                    $this->row_column_of_table_should_contain($firstcell, $column, $table, $value);
-                }
-            }
+            $this->ensure_table_row_exists($table, $row);
         }
     }
 
     /**
      * Checks that the provided values do not exist in a table.
+     *
+     * If there are more than two columns, we check that NEITHER of the columns 2..n match
+     * in the row where the first column matches
      *
      * @Then /^the following should not exist in the "(?P<table_string>[^"]*)" table:$/
      * @throws ExpectationException
@@ -1423,20 +1627,24 @@ EOF;
      */
     public function following_should_not_exist_in_the_table($table, TableNode $data) {
         $datahash = $data->getHash();
+        if ($datahash && count($data->getRow(0)) != count($datahash[0])) {
+            // Check that the number of columns in the hash is the same as the number of the columns in the first row.
+            throw new coding_exception('Table contains duplicate column headers');
+        }
 
         foreach ($datahash as $value) {
-            $row = array_shift($value);
-            foreach ($value as $column => $value) {
-                try {
-                    $this->row_column_of_table_should_contain($row, $column, $table, $value);
-                    // Throw exception if found.
-                } catch (ElementNotFoundException $e) {
-                    // Table row/column doesn't contain this value. Nothing to do.
-                    continue;
+            if (count($value) > 2) {
+                // When there are more than two columns, what we really want to check is that for the rows
+                // where the first column matches, NEITHER of the other columns match.
+                $columns = array_keys($value);
+                for ($i = 1; $i < count($columns); $i++) {
+                    $this->ensure_table_row_does_not_exist($table, [
+                        $columns[0] => $value[$columns[0]],
+                        $columns[$i] => $value[$columns[$i]],
+                    ]);
                 }
-                throw new ExpectationException('"' . $column . '" with value "' . $value . '" is present in "' .
-                    $row . '"  row for table "' . $table . '"', $this->getSession()
-                );
+            } else {
+                $this->ensure_table_row_does_not_exist($table, $value);
             }
         }
     }
@@ -1444,15 +1652,24 @@ EOF;
     /**
      * Given the text of a link, download the linked file and return the contents.
      *
-     * This is a helper method used by {@link following_should_download_bytes()}
-     * and {@link following_should_download_between_and_bytes()}
+     * A helper method used by the steps in {@see behat_download}, and the legacy
+     * {@see following_should_download_bytes()} and {@see following_should_download_between_and_bytes()}.
      *
      * @param string $link the text of the link.
+     * @param string $containerlocator optional container element locator.
+     * @param string $containertype optional container element selector type.
+     *
      * @return string the content of the downloaded file.
      */
-    public function download_file_from_link($link) {
+    public function download_file_from_link(string $link, string $containerlocator = '', string $containertype = ''): string {
+
         // Find the link.
-        $linknode = $this->find_link($link);
+        if ($containerlocator !== '' && $containertype !== '') {
+            $linknode = $this->get_node_in_container('link', $link, $containertype, $containerlocator);
+        } else {
+            $linknode = $this->find_link($link);
+        }
+
         $this->ensure_node_is_visible($linknode);
 
         // Get the href and check it.
@@ -1473,6 +1690,8 @@ EOF;
 
     /**
      * Downloads the file from a link on the page and checks the size.
+     *
+     * Not recommended any more. The steps in {@see behat_download} are much better!
      *
      * Only works if the link has an href attribute. Javascript downloads are
      * not supported. Currently, the href must be an absolute URL.
@@ -1507,6 +1726,8 @@ EOF;
     /**
      * Downloads the file from a link on the page and checks the size is in a given range.
      *
+     * Not recommended any more. The steps in {@see behat_download} are much better!
+     *
      * Only works if the link has an href attribute. Javascript downloads are
      * not supported. Currently, the href must be an absolute URL.
      *
@@ -1514,10 +1735,11 @@ EOF;
      * be between "5" and "10" bytes, and between "10" and "20" bytes.
      *
      * @Then /^following "(?P<link_string>[^"]*)" should download between "(?P<min_bytes>\d+)" and "(?P<max_bytes>\d+)" bytes$/
-     * @throws ExpectationException
+     *
      * @param string $link the text of the link.
      * @param number $minexpectedsize the minimum expected file size in bytes.
      * @param number $maxexpectedsize the maximum expected file size in bytes.
+     * @throws ExpectationException
      */
     public function following_should_download_between_and_bytes($link, $minexpectedsize, $maxexpectedsize) {
         // If the minimum is greater than the maximum then swap the values.
@@ -1584,7 +1806,7 @@ EOF;
 
         if ($content !== $expectedcontent) {
             throw new ExpectationException('Image is not identical to the fixture. Received ' .
-            strlen($content) . ' bytes and expected ' . strlen($expectedcontent) . ' bytes');
+            strlen($content) . ' bytes and expected ' . strlen($expectedcontent) . ' bytes', $this->getSession());
         }
     }
 
@@ -1609,11 +1831,12 @@ EOF;
 
         $this->pageloaddetectionrunning = true;
 
-        $session->executeScript(
-                'var span = document.createElement("span");
-                span.setAttribute("data-rel", "' . self::PAGE_LOAD_DETECTION_STRING . '");
-                span.setAttribute("style", "display: none;");
-                document.body.appendChild(span);');
+        $this->execute_script(
+            'var span = document.createElement("span");
+            span.setAttribute("data-rel", "' . self::PAGE_LOAD_DETECTION_STRING . '");
+            span.setAttribute("style", "display: none;");
+            document.body.appendChild(span);'
+        );
     }
 
     /**
@@ -1711,6 +1934,160 @@ EOF;
     }
 
     /**
+     * Send key presses to the browser without first changing focusing, or applying the key presses to a specific
+     * element.
+     *
+     * Example usage of this step:
+     *     When I type "Penguin"
+     *
+     * @When    I type :keys
+     * @param   string $keys The key, or list of keys, to type
+     */
+    public function i_type(string $keys): void {
+        // Certain keys, such as the newline character, must be converted to the appropriate character code.
+        // Without this, keys will behave differently depending on the browser.
+        $keylist = array_map(function($key): string {
+            switch ($key) {
+                case "\n":
+                    return behat_keys::ENTER;
+                default:
+                    return $key;
+            }
+        }, str_split($keys));
+        behat_base::type_keys($this->getSession(), $keylist);
+    }
+
+    /**
+     * Press a named or character key with an optional set of modifiers.
+     *
+     * Supported named keys are:
+     * - up
+     * - down
+     * - left
+     * - right
+     * - pageup|page_up
+     * - pagedown|page_down
+     * - home
+     * - end
+     * - insert
+     * - delete
+     * - backspace
+     * - escape
+     * - enter
+     * - tab
+     *
+     * You can also use a single character for the key name e.g. 'Ctrl C'.
+     *
+     * Supported moderators are:
+     * - shift
+     * - ctrl
+     * - alt
+     * - meta
+     *
+     * Example usage of this new step:
+     *     When I press the up key
+     *     When I press the space key
+     *     When I press the shift tab key
+     *
+     * Multiple moderator keys can be combined using the '+' operator, for example:
+     *     When I press the ctrl+shift enter key
+     *     When I press the ctrl + shift enter key
+     *
+     * @When    /^I press the (?P<modifiers_string>.* )?(?P<key_string>.*) key$/
+     * @param   string $modifiers A list of keyboard modifiers, separated by the `+` character
+     * @param   string $key The name of the key to press
+     */
+    public function i_press_named_key(string $modifiers, string $key): void {
+        behat_base::require_javascript_in_session($this->getSession());
+
+        $keys = [];
+
+        foreach (explode('+', $modifiers) as $modifier) {
+            switch (strtoupper(trim($modifier))) {
+                case '':
+                    break;
+                case 'SHIFT':
+                    $keys[] = behat_keys::SHIFT;
+                    break;
+                case 'CTRL':
+                    $keys[] = behat_keys::CONTROL;
+                    break;
+                case 'ALT':
+                    $keys[] = behat_keys::ALT;
+                    break;
+                case 'META':
+                    $keys[] = behat_keys::META;
+                    break;
+                default:
+                    throw new \coding_exception("Unknown modifier key '$modifier'}");
+            }
+        }
+
+        $modifier = trim($key);
+        switch (strtoupper($key)) {
+            case 'UP':
+                $keys[] = behat_keys::ARROW_UP;
+                break;
+            case 'DOWN':
+                $keys[] = behat_keys::ARROW_DOWN;
+                break;
+            case 'LEFT':
+                $keys[] = behat_keys::ARROW_LEFT;
+                break;
+            case 'RIGHT':
+                $keys[] = behat_keys::ARROW_RIGHT;
+                break;
+            case 'HOME':
+                $keys[] = behat_keys::HOME;
+                break;
+            case 'END':
+                $keys[] = behat_keys::END;
+                break;
+            case 'INSERT':
+                $keys[] = behat_keys::INSERT;
+                break;
+            case 'BACKSPACE':
+                $keys[] = behat_keys::BACKSPACE;
+                break;
+            case 'DELETE':
+                $keys[] = behat_keys::DELETE;
+                break;
+            case 'PAGEUP':
+            case 'PAGE_UP':
+                $keys[] = behat_keys::PAGE_UP;
+                break;
+            case 'PAGEDOWN':
+            case 'PAGE_DOWN':
+                $keys[] = behat_keys::PAGE_DOWN;
+                break;
+            case 'ESCAPE':
+                $keys[] = behat_keys::ESCAPE;
+                break;
+            case 'ENTER':
+                $keys[] = behat_keys::ENTER;
+                break;
+            case 'TAB':
+                $keys[] = behat_keys::TAB;
+                break;
+            case 'SPACE':
+                $keys[] = behat_keys::SPACE;
+                break;
+            case 'MULTIPLY':
+                $keys[] = behat_keys::MULTIPLY;
+                break;
+            default:
+                // You can enter a single ASCII character (e.g. a letter) to directly type that key.
+                if (strlen($key) === 1) {
+                    $keys[] = strtolower($key);
+                } else {
+                    throw new \coding_exception("Unknown key '$key'}");
+                }
+        }
+
+        behat_base::type_keys($this->getSession(), $keys);
+    }
+
+    /**
      * Trigger a keydown event for a key on a specific element.
      *
      * @When /^I press key "(?P<key_string>(?:[^"]|\\")*)" in "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)"$/
@@ -1734,7 +2111,8 @@ EOF;
             list($modifier, $char) = preg_split('/-/', $key, 2);
             $modifier = strtolower($modifier);
             if (!in_array($modifier, $validmodifiers)) {
-                throw new ExpectationException(sprintf('Unknown key modifier: %s.', $modifier));
+                throw new ExpectationException(sprintf('Unknown key modifier: %s.', $modifier),
+                    $this->getSession());
             }
         }
         if (is_numeric($char)) {
@@ -1761,12 +2139,8 @@ EOF;
         }
         // Gets the node based on the requested selector type and locator.
         $node = $this->get_selected_node($selectortype, $element);
-        $driver = $this->getSession()->getDriver();
-        if ($driver instanceof \Moodle\BehatExtension\Driver\MoodleSelenium2Driver) {
-            $driver->post_key("\xEE\x80\x84", $node->getXpath());
-        } else {
-            $driver->keyDown($node->getXpath(), "\t");
-        }
+        $this->execute('behat_general::i_click_on', [$node, 'NodeElement']);
+        $this->execute('behat_general::i_press_named_key', ['', 'tab']);
     }
 
     /**
@@ -1793,6 +2167,21 @@ EOF;
     }
 
     /**
+     * Checks if given plugin is installed, and skips the current scenario if not.
+     *
+     * @Given the :plugin plugin is installed
+     * @param string $plugin frankenstyle plugin name, e.g. 'filter_embedquestion'.
+     * @throws \Moodle\BehatExtension\Exception\SkippedException
+     */
+    public function plugin_is_installed(string $plugin): void {
+        $path = core_component::get_component_directory($plugin);
+        if (!is_readable($path . '/version.php')) {
+            throw new \Moodle\BehatExtension\Exception\SkippedException(
+                    'Skipping this scenario because the ' . $plugin . ' is not installed.');
+        }
+    }
+
+    /**
      * Checks focus is with the given element.
      *
      * @Then /^the focused element is( not)? "(?P<node_string>(?:[^"]|\\")*)" "(?P<node_selector_string>[^"]*)"$/
@@ -1811,7 +2200,7 @@ EOF;
         $xpath = addslashes_js($element->getXpath());
         $script = 'return (function() { return document.activeElement === document.evaluate("' . $xpath . '",
                 document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; })(); ';
-        $targetisfocused = $this->getSession()->evaluateScript($script);
+        $targetisfocused = $this->evaluate_script($script);
         if ($not == ' not') {
             if ($targetisfocused) {
                 throw new ExpectationException("$nodeelement $nodeselectortype is focused", $this->getSession());
@@ -1843,7 +2232,7 @@ EOF;
         $xpath = addslashes_js($element->getXpath());
         $script = 'return (function() { return document.activeElement === document.evaluate("' . $xpath . '",
                 document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; })(); ';
-        $targetisfocused = $this->getSession()->evaluateScript($script);
+        $targetisfocused = $this->evaluate_script($script);
         if ($not == ' not') {
             if ($targetisfocused) {
                 throw new ExpectationException("$nodeelement $nodeselectortype is focused", $this->getSession());
@@ -1863,12 +2252,11 @@ EOF;
      * @throws DriverException
      */
     public function i_manually_press_tab($shift = '') {
-        if (!$this->running_javascript()) {
-            throw new DriverException($shift . ' Tab press step is not available with Javascript disabled');
+        if (empty($shift)) {
+            $this->execute('behat_general::i_press_named_key', ['', 'tab']);
+        } else {
+            $this->execute('behat_general::i_press_named_key', ['shift', 'tab']);
         }
-
-        $value = ($shift == ' shift') ? [\WebDriver\Key::SHIFT . \WebDriver\Key::TAB] : [\WebDriver\Key::TAB];
-        $this->getSession()->getDriver()->getWebDriverSession()->activeElement()->postValue(['value' => $value]);
     }
 
     /**
@@ -1930,11 +2318,154 @@ EOF;
      * @throws DriverException
      */
     public function i_manually_press_enter() {
-        if (!$this->running_javascript()) {
-            throw new DriverException('Enter press step is not available with Javascript disabled');
+        $this->execute('behat_general::i_press_named_key', ['', 'enter']);
+    }
+
+    /**
+     * Visit a local URL relative to the behat root.
+     *
+     * @When I visit :localurl
+     *
+     * @param string|moodle_url $localurl The URL relative to the behat_wwwroot to visit.
+     */
+    public function i_visit($localurl): void {
+        $localurl = new moodle_url($localurl);
+        $this->getSession()->visit($this->locate_path($localurl->out_as_local_url(false)));
+    }
+
+    /**
+     * Increase the webdriver timeouts.
+     *
+     * This should be reset between scenarios, or can be called again to decrease the timeouts.
+     *
+     * @Given I mark this test as slow setting a timeout factor of :factor
+     */
+    public function i_mark_this_test_as_long_running(int $factor = 2): void {
+        $this->set_test_timeout_factor($factor);
+    }
+
+    /**
+     * Click on a dynamic tab to load its content
+     *
+     * @Given /^I click on the "(?P<tab_string>(?:[^"]|\\")*)" dynamic tab$/
+     *
+     * @param string $tabname
+     */
+    public function i_click_on_the_dynamic_tab(string $tabname): void {
+        $xpath = "//*[@id='dynamictabs-tabs'][descendant::a[contains(text(), '" . $this->escape($tabname) . "')]]";
+        $this->execute('behat_general::i_click_on_in_the',
+            [$tabname, 'link', $xpath, 'xpath_element']);
+    }
+
+    /**
+     * Enable an specific plugin.
+     *
+     * @When /^I enable "(?P<plugin_string>(?:[^"]|\\")*)" "(?P<plugintype_string>[^"]*)" plugin$/
+     * @param string $plugin Plugin we look for
+     * @param string $plugintype The type of the plugin
+     */
+    public function i_enable_plugin($plugin, $plugintype) {
+        $class = core_plugin_manager::resolve_plugininfo_class($plugintype);
+        $class::enable_plugin($plugin, true);
+    }
+
+    /**
+     * Set the default text editor to the named text editor.
+     *
+     * @Given the default editor is set to :editor
+     * @param string $editor
+     * @throws ExpectationException If the specified editor is not available.
+     */
+    public function the_default_editor_is_set_to(string $editor): void {
+        global $CFG;
+
+        // Check if the provided editor is available.
+        if (!array_key_exists($editor, editors_get_available())) {
+            throw new ExpectationException(
+                "Unable to set the editor to {$editor} as it is not installed. The available editors are: " .
+                    implode(', ', array_keys(editors_get_available())),
+                $this->getSession()
+            );
         }
 
-        $value = [\WebDriver\Key::ENTER];
-        $this->getSession()->getDriver()->getWebDriverSession()->activeElement()->postValue(['value' => $value]);
+        // Make the provided editor the default one in $CFG->texteditors by
+        // moving it to the first [editor],atto,tiny,tinymce,textarea on the list.
+        $list = explode(',', $CFG->texteditors);
+        array_unshift($list, $editor);
+        $list = array_unique($list);
+
+        // Set the list new list of editors.
+        set_config('texteditors', implode(',', $list));
+    }
+
+    /**
+     * Allow to check for minimal Moodle version.
+     *
+     * @Given the site is running Moodle version :minversion or higher
+     * @param string $minversion The minimum version of Moodle required (inclusive).
+     */
+    public function the_site_is_running_moodle_version_or_higher(string $minversion): void {
+        global $CFG;
+        require_once($CFG->libdir . '/environmentlib.php');
+
+        $currentversion = normalize_version(get_config('', 'release'));
+
+        if (version_compare($currentversion, $minversion, '<')) {
+            throw new Moodle\BehatExtension\Exception\SkippedException(
+                'Site must be running Moodle version ' . $minversion . ' or higher'
+            );
+        }
+    }
+
+    /**
+     * Allow to check for maximum Moodle version.
+     *
+     * @Given the site is running Moodle version :maxversion or lower
+     * @param string $maxversion The maximum version of Moodle required (inclusive).
+     */
+    public function the_site_is_running_moodle_version_or_lower(string $maxversion): void {
+        global $CFG;
+        require_once($CFG->libdir . '/environmentlib.php');
+
+        $currentversion = normalize_version(get_config('', 'release'));
+
+        if (version_compare($currentversion, $maxversion, '>')) {
+            throw new Moodle\BehatExtension\Exception\SkippedException(
+                'Site must be running Moodle version ' . $maxversion . ' or lower'
+            );
+        }
+    }
+
+    /**
+     * Check that the page title contains a given string.
+     *
+     * @Given the page title should contain ":title"
+     * @param string $title The string that should be present on the page title.
+     */
+    public function the_page_title_should_contain(string $title): void {
+        $session = $this->getSession();
+        if ($this->running_javascript()) {
+            // When running on JS, the page title can be changed via JS, so it's more reliable to get the actual page title via JS.
+            $actualtitle = $session->evaluateScript("return document.title");
+        } else {
+            $titleelement = $session->getPage()->find('css', 'head title');
+            if ($titleelement === null) {
+                // Throw an exception if a page title is not present on the page.
+                throw new ElementNotFoundException(
+                    $this->getSession(),
+                    '<title> element',
+                    'css',
+                    'head title'
+                );
+            }
+            $actualtitle = $titleelement->getText();
+        }
+
+        if (strpos($actualtitle, $title) === false) {
+            throw new ExpectationException(
+                "'$title' was not found from the current page title '$actualtitle'",
+                $session
+            );
+        }
     }
 }

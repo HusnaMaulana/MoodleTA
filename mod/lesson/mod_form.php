@@ -278,7 +278,7 @@ class mod_lesson_mod_form extends moodleform_mod {
         $mform->setDefault('review', $lessonconfig->displayreview);
         $mform->setAdvanced('review', $lessonconfig->displayreview_adv);
 
-        $numbers = array();
+        $numbers = array('0' => get_string('unlimited'));
         for ($i = 10; $i > 0; $i--) {
             $numbers[$i] = $i;
         }
@@ -358,10 +358,10 @@ class mod_lesson_mod_form extends moodleform_mod {
      **/
     public function data_preprocessing(&$defaultvalues) {
         if (isset($defaultvalues['conditions'])) {
-            $conditions = unserialize($defaultvalues['conditions']);
-            $defaultvalues['timespent'] = $conditions->timespent;
-            $defaultvalues['completed'] = $conditions->completed;
-            $defaultvalues['gradebetterthan'] = $conditions->gradebetterthan;
+            $conditions = unserialize_object($defaultvalues['conditions']);
+            $defaultvalues['timespent'] = $conditions->timespent ?? 0;
+            $defaultvalues['completed'] = !empty($conditions->completed);
+            $defaultvalues['gradebetterthan'] = $conditions->gradebetterthan ?? 0;
         }
 
         // Set up the completion checkbox which is not part of standard data.

@@ -14,6 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core_h5p;
+
+use core_h5p\local\library\autoloader;
+
+use invalid_response_exception;
+
 /**
  * Testing the H5P core methods.
  *
@@ -21,26 +27,13 @@
  * @category   test
  * @copyright  2019 Victor Deniz <victor@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-namespace core_h5p;
-
-use core_h5p\local\library\autoloader;
-
-defined('MOODLE_INTERNAL') || die();
-
-/**
- * Test class covering the H5PFileStorage interface implementation.
- *
- * @package    core_h5p
- * @copyright  2019 Victor Deniz <victor@moodle.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \core_h5p\core
  *
  * @runTestsInSeparateProcesses
  */
-class h5p_core_testcase extends \advanced_testcase {
+final class h5p_core_test extends \advanced_testcase {
 
-    protected function setup() {
+    protected function setUp(): void {
         global $CFG;
         parent::setUp();
 
@@ -67,9 +60,19 @@ class h5p_core_testcase extends \advanced_testcase {
         $this->resetAfterTest(true);
 
         // Get info of latest content types versions.
-        $contenttypes = $this->core->get_latest_content_types()->contentTypes;
-        // We are installing the first content type.
-        $librarydata = $contenttypes[0];
+        $response = $this->core->get_latest_content_types();
+        if (!empty($response->error)) {
+            throw new invalid_response_exception($response->error);
+        }
+
+        // We are installing the first content type with tutorial and example fields (or the first one if none has them).
+        $librarydata = $response->contentTypes[0];
+        foreach ($response->contentTypes as $contenttype) {
+            if (isset($contenttype->tutorial) && isset($contenttype->example)) {
+                $librarydata = $contenttype;
+                break;
+            }
+        }
 
         $library = [
                 'machineName' => $librarydata->id,
@@ -77,6 +80,13 @@ class h5p_core_testcase extends \advanced_testcase {
                 'minorVersion' => $librarydata->version->minor,
                 'patchVersion' => $librarydata->version->patch,
         ];
+        // Add example and tutorial to the library.
+        if (isset($librarydata->example)) {
+            $library['example'] = $librarydata->example;
+        }
+        if (isset($librarydata->tutorial)) {
+            $library['tutorial'] = $librarydata->tutorial;
+        }
 
         // Verify that the content type is not yet installed.
         $conditions['machinename'] = $library['machineName'];
@@ -92,6 +102,10 @@ class h5p_core_testcase extends \advanced_testcase {
         $this->assertEquals($librarydata->id, $typeinstalled->machinename);
         $this->assertEquals($librarydata->coreApiVersionNeeded->major, $typeinstalled->coremajor);
         $this->assertEquals($librarydata->coreApiVersionNeeded->minor, $typeinstalled->coreminor);
+        if (isset($librarydata->tutorial)) {
+            $this->assertEquals($librarydata->tutorial, $typeinstalled->tutorial);
+            $this->assertEquals($librarydata->example, $typeinstalled->example);
+        }
     }
 
     /**

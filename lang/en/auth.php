@@ -30,7 +30,7 @@ $string['auth_data_mapping'] = 'Data mapping';
 $string['authenticationoptions'] = 'Authentication options';
 $string['auth_fieldlock'] = 'Lock value';
 $string['auth_fieldlockfield'] = 'Lock value ({$a})';
-$string['auth_fieldlock_expl'] = '<p><b>Lock value:</b> If enabled, will prevent Moodle users and admins from editing the field directly. Use this option if you are maintaining this data in the external auth system. </p>';
+$string['auth_fieldlock_expl'] = '<p>Lock value: If enabled, users will not be able to edit the field. Use this option if you are maintaining this data in the external auth system. </p>';
 $string['auth_fieldlocks'] = 'Lock user fields';
 $string['auth_fieldlocks_help'] = '<p>You can lock user data fields. This is useful for sites where the user data is maintained by the administrators manually by editing user records or uploading using the \'Upload users\' facility. If you are locking fields that are required by Moodle, make sure that you provide that data when creating user accounts or the accounts will be unusable.</p><p>Consider setting the lock mode to \'Unlocked if empty\' to avoid this problem.</p>';
 $string['auth_fieldmapping'] = 'Data mapping ({$a})';
@@ -38,7 +38,7 @@ $string['auth_changepasswordhelp'] = 'Change password help';
 $string['auth_changepasswordhelp_expl'] = 'Display lost password help to users who have lost their {$a} password. This will be displayed either as well as or instead of the <strong>Change Password URL</strong> or Internal Moodle password change.';
 $string['auth_changepasswordurl'] = 'Change password URL';
 $string['auth_changepasswordurl_expl'] = 'Specify the url to send users who have lost their {$a} password. Set <strong>Use standard Change Password page</strong> to <strong>No</strong>.';
-$string['auth_changingemailaddress'] = 'You have requested a change of email address, from {$a->oldemail} to {$a->newemail}. For security reasons, we are sending you an email message at the new address to confirm that it belongs to you. Your email address will be updated as soon as you open the URL sent to you in that message.';
+$string['auth_changingemailaddress'] = 'You have requested a change of email address, from {$a->oldemail} to {$a->newemail}. For security reasons, we are sending you an email message at the new address to confirm that it belongs to you. Your email address will be updated as soon as you open the URL sent to you in that message. The confirmation link will expire in <b>10 minutes</b>';
 $string['authinstructions'] = 'Leave this blank for the default login instructions to be displayed on the login page. If you want to provide custom login instructions, enter them here.';
 $string['auth_invalidnewemailkey'] = 'Error: if you are trying to confirm a change of email address, you may have made a mistake in copying the URL we sent you by email. Please copy the address and try again.';
 $string['auth_multiplehosts'] = 'Multiple hosts OR addresses can be specified (eg host1.com;host2.com;host3.com) or (eg xxx.xxx.xxx.xxx;xxx.xxx.xxx.xxx)';
@@ -78,6 +78,7 @@ $string['emailupdatemessage'] = 'Dear {$a->fullname},
 You have requested a change of your email address for your account on {$a->site}. To confirm this change, please go to the following web address:
 
 {$a->url}
+The confirmation link will expire in <b>10 minutes</b>.
 
 {$a->supportemail}';
 $string['emailupdatesuccess'] = 'Email address of user <em>{$a->fullname}</em> was successfully updated to <em>{$a->email}</em>.';
@@ -86,7 +87,7 @@ $string['errormaxconsecutiveidentchars'] = 'Passwords must have at most {$a} con
 $string['errorminpassworddigits'] = 'Passwords must have at least {$a} digit(s).';
 $string['errorminpasswordlength'] = 'Passwords must be at least {$a} characters long.';
 $string['errorminpasswordlower'] = 'Passwords must have at least {$a} lower case letter(s).';
-$string['errorminpasswordnonalphanum'] = 'Passwords must have at least {$a} non-alphanumeric character(s) such as as *, -, or #.';
+$string['errorminpasswordnonalphanum'] = 'The password must have at least {$a} special character(s) such as *, -, or #.';
 $string['errorpasswordreused'] = 'This password has been used before, and is not permitted to be reused';
 $string['errorminpasswordupper'] = 'Passwords must have at least {$a} upper case letter(s).';
 $string['errorpasswordupdate'] = 'Error updating password, password not changed';
@@ -109,7 +110,7 @@ $string['infilefield'] = 'Field required in file';
 $string['informminpassworddigits'] = 'at least {$a} digit(s)';
 $string['informminpasswordlength'] = 'at least {$a} characters';
 $string['informminpasswordlower'] = 'at least {$a} lower case letter(s)';
-$string['informminpasswordnonalphanum'] = 'at least {$a} non-alphanumeric character(s) such as as *, -, or #';
+$string['informminpasswordnonalphanum'] = 'at least {$a} special character(s) such as *, -, or #';
 $string['informminpasswordreuselimit'] = 'Passwords can be reused after {$a} changes';
 $string['informminpasswordupper'] = 'at least {$a} upper case letter(s)';
 $string['informpasswordpolicy'] = 'The password must have {$a}';

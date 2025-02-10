@@ -102,8 +102,10 @@ class user_roles_editable extends \core\output\inplace_editable {
                 }
             }
         }
-        $this->edithint = get_string('xroleassignments', 'role', fullname($user));
-        $this->editlabel = get_string('xroleassignments', 'role', fullname($user));
+
+        $fullname = htmlspecialchars(fullname($user), ENT_QUOTES, 'utf-8');
+        $this->edithint = get_string('xroleassignments', 'role', $fullname);
+        $this->editlabel = get_string('xroleassignments', 'role', $fullname);
 
         $attributes = ['multiple' => true];
         $this->set_type_autocomplete($options, $attributes);
@@ -173,8 +175,8 @@ class user_roles_editable extends \core\output\inplace_editable {
         }
 
         // Check that all the groups belong to the course.
-        $allroles = role_fix_names(get_all_roles($context), $context);
-        $assignableroles = get_assignable_roles($context, ROLENAME_ALIAS, false);
+        $allroles = role_fix_names(get_all_roles($context), $context, ROLENAME_BOTH);
+        $assignableroles = get_assignable_roles($context, ROLENAME_BOTH, false);
         $viewableroles = get_viewable_roles($context);
         $userrolesbyid = get_user_roles($context, $userid, true, 'c.contextlevel DESC, r.sortorder ASC');
         $profileroles = get_profile_roles($context);

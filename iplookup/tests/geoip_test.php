@@ -14,35 +14,31 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * GeoIP tests
- *
- * @package    core_iplookup
- * @category   phpunit
- * @copyright  2012 Petr Skoda {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-
-require_once("{$CFG->libdir}/filelib.php");
-require_once("{$CFG->dirroot}/iplookup/lib.php");
-
+namespace core;
 
 /**
  * GeoIp data file parsing test.
+ *
+ * @package    core
+ * @category   test
+ * @copyright  2012 Petr Skoda {@link http://skodak.org}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_iplookup_geoip_testcase extends advanced_testcase {
-    public function setUp() {
-        $this->resetAfterTest();
+final class geoip_test extends \advanced_testcase {
+    #[\Override]
+    public static function setUpBeforeClass(): void {
+        global $CFG;
+
+        parent::setUpBeforeClass();
+
+        require_once("{$CFG->libdir}/filelib.php");
+        require_once("{$CFG->dirroot}/iplookup/lib.php");
     }
 
     /**
      * Setup the GeoIP2File system.
      */
-    public function setup_geoip2file() {
+    public function setup_geoip2file(): void {
         global $CFG;
         $CFG->geoip2file = "$CFG->dirroot/iplookup/tests/fixtures/GeoIP2-City-Test.mmdb";
     }
@@ -53,7 +49,9 @@ class core_iplookup_geoip_testcase extends advanced_testcase {
      * @dataProvider ip_provider
      * @param   string  $ip The IP to test
      */
-    public function test_ip($ip) {
+    public function test_ip($ip): void {
+        $this->resetAfterTest();
+
         $this->setup_geoip2file();
 
         // Note: The results we get from the iplookup tests are beyond our control.
@@ -62,14 +60,14 @@ class core_iplookup_geoip_testcase extends advanced_testcase {
 
         $result = iplookup_find_location($ip);
 
-        $this->assertInternalType('array', $result);
-        $this->assertInternalType('float', $result['latitude']);
-        $this->assertInternalType('float', $result['longitude']);
-        $this->assertInternalType('string', $result['city']);
-        $this->assertInternalType('string', $result['country']);
-        $this->assertInternalType('array', $result['title']);
-        $this->assertInternalType('string', $result['title'][0]);
-        $this->assertInternalType('string', $result['title'][1]);
+        $this->assertIsArray($result);
+        $this->assertIsFloat($result['latitude']);
+        $this->assertIsFloat($result['longitude']);
+        $this->assertIsString($result['city']);
+        $this->assertIsString($result['country']);
+        $this->assertIsArray($result['title']);
+        $this->assertIsString($result['title'][0]);
+        $this->assertIsString($result['title'][1]);
         $this->assertNull($result['error']);
     }
 
@@ -78,7 +76,7 @@ class core_iplookup_geoip_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function ip_provider() {
+    public static function ip_provider(): array {
         return [
             'IPv4: IPV4 test' => ['81.2.69.142'],
             'IPv6: IPV6 test' => ['2001:252:1::1:1:1'],

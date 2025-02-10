@@ -134,6 +134,30 @@ class behat_transformations extends behat_base {
     }
 
     /**
+     * Convert #wwwroot# to the wwwroot config value, so it is
+     * possible to reference fully qualified URLs within the site.
+     *
+     * @Transform /^((.*)#wwwroot#(.*))$/
+     * @param string $string
+     * @return string
+     */
+    public function arg_insert_wwwroot(string $string): string {
+        return $this->replace_wwwroot($string);
+    }
+
+    /**
+     * Convert #dirroot# to the dirroot config value, so it is
+     * possible to reference files (e.g. fixtures) with an absolute path.
+     *
+     * @Transform /^((.*)#dirroot#(.*))$/
+     * @param string $string
+     * @return string
+     */
+    public function arg_insert_dirroot(string $string): string {
+        return $this->replace_dirroot($string);
+    }
+
+    /**
      * Replaces $NASTYSTRING vars for a nasty string.
      *
      * Method reused by TableNode tranformation.
@@ -167,13 +191,35 @@ class behat_transformations extends behat_base {
 
         $count = count($timepassed);
         if ($count === 2) {
-            // If timestamp with spcified format, then retrun date.
-            return date($timepassed[1], $timestamp);
+            // If timestamp with specified strftime format, then return formatted date string.
+            return userdate($timestamp, $timepassed[1]);
         } else if ($count === 1) {
             return $timestamp;
         } else {
             // If not a valid time string, then just return what was passed.
             return $time;
         }
+    }
+
+    /**
+     * Replace #wwwroot# with the actual wwwroot config value.
+     *
+     * @param string $string String to attempt the replacement in.
+     * @return string
+     */
+    protected function replace_wwwroot(string $string): string {
+        global $CFG;
+        return str_replace('#wwwroot#', $CFG->wwwroot, $string);
+    }
+
+    /**
+     * Replace #dirroot# with the actual dirroot config value.
+     *
+     * @param string $string String to attempt the replacement in.
+     * @return string
+     */
+    protected function replace_dirroot(string $string): string {
+        global $CFG;
+        return str_replace('#dirroot#', $CFG->dirroot, $string);
     }
 }

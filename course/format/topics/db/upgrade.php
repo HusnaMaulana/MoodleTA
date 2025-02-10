@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Upgrade scripts for course format "Topics"
+ * Upgrade scripts for Topics course format.
  *
  * @package    format_topics
  * @copyright  2017 Marina Glancy
@@ -25,28 +25,33 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Upgrade script for format_topics
+ * Upgrade script for Topics course format.
  *
- * @param int $oldversion the version we are upgrading from
+ * @param int|float $oldversion the version we are upgrading from
  * @return bool result
  */
 function xmldb_format_topics_upgrade($oldversion) {
     global $CFG, $DB;
 
-    // Automatically generated Moodle v3.5.0 release upgrade line.
-    // Put any upgrade step following this.
-
-    // Automatically generated Moodle v3.6.0 release upgrade line.
-    // Put any upgrade step following this.
-
-    // Automatically generated Moodle v3.7.0 release upgrade line.
-    // Put any upgrade step following this.
-
-    // Automatically generated Moodle v3.8.0 release upgrade line.
-    // Put any upgrade step following this.
-
     // Automatically generated Moodle v3.9.0 release upgrade line.
     // Put any upgrade step following this.
+
+    // Automatically generated Moodle v4.0.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Automatically generated Moodle v4.1.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2022112801) {
+        // For sites migrating from 4.0.x or 4.1.x where the indentation was removed,
+        // we are disabling 'indentation' value by default.
+        if ($oldversion >= 2022041900) {
+            set_config('indentation', 0, 'format_topics');
+        } else {
+            set_config('indentation', 1, 'format_topics');
+        }
+        upgrade_plugin_savepoint(true, 2022112801, 'format', 'topics');
+    }
 
     return true;
 }

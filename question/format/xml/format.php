@@ -58,6 +58,18 @@ class qformat_xml extends qformat_default {
         return 'application/xml';
     }
 
+    /**
+     * Validate the given file.
+     *
+     * For more expensive or detailed integrity checks.
+     *
+     * @param stored_file $file the file to check
+     * @return string the error message that occurred while validating the given file
+     */
+    public function validate_file(stored_file $file): string {
+        return $this->validate_is_utf8_file($file);
+    }
+
     // IMPORT FUNCTIONS START HERE.
 
     /**
@@ -523,6 +535,8 @@ class qformat_xml extends qformat_default {
             $qo->questiontext .= ' <img src="@@PLUGINFILE@@/' . $filename . '" />';
         }
 
+        $qo->idnumber = $this->getpath($question, ['#', 'idnumber', 0, '#'], null);
+
         // Restore files in generalfeedback.
         $generalfeedback = $this->import_text_with_files($question,
                 array('#', 'generalfeedback', 0), '', $this->get_format($qo->questiontextformat));
@@ -770,10 +784,20 @@ class qformat_xml extends qformat_default {
                 array('#', 'responsefieldlines', 0, '#'), 15);
         $qo->responserequired = $this->getpath($question,
                 array('#', 'responserequired', 0, '#'), 1);
+        $qo->minwordlimit = $this->getpath($question,
+                array('#', 'minwordlimit', 0, '#'), null);
+        $qo->minwordenabled = !empty($qo->minwordlimit);
+        $qo->maxwordlimit = $this->getpath($question,
+                array('#', 'maxwordlimit', 0, '#'), null);
+        $qo->maxwordenabled = !empty($qo->maxwordlimit);
         $qo->attachments = $this->getpath($question,
                 array('#', 'attachments', 0, '#'), 0);
         $qo->attachmentsrequired = $this->getpath($question,
                 array('#', 'attachmentsrequired', 0, '#'), 0);
+        $qo->filetypeslist = $this->getpath($question,
+                array('#', 'filetypeslist', 0, '#'), null);
+        $qo->maxbytes = $this->getpath($question,
+                array('#', 'maxbytes', 0, '#'), null);
         $qo->graderinfo = $this->import_text_with_files($question,
                 array('#', 'graderinfo', 0), '', $this->get_format($qo->questiontextformat));
         $qo->responsetemplate['text'] = $this->getpath($question,
@@ -1103,7 +1127,7 @@ class qformat_xml extends qformat_default {
      * @return string the string, wrapped in CDATA if necessary.
      */
     public function xml_escape($string) {
-        if (!empty($string) && htmlspecialchars($string) != $string) {
+        if (!empty($string) && htmlspecialchars($string, ENT_COMPAT) != $string) {
             // If the string contains something that looks like the end
             // of a CDATA section, then we need to avoid errors by splitting
             // the string between two CDATA sections.
@@ -1168,11 +1192,11 @@ class qformat_xml extends qformat_default {
      * @return string xml segment
      */
     public function writequestion($question) {
-        global $CFG, $OUTPUT;
 
         $invalidquestion = false;
         $fs = get_file_storage();
         $contextid = $question->contextid;
+        $question->status = 0;
         // Get files used by the questiontext.
         $question->questiontextfiles = $fs->get_area_files(
                 $contextid, 'question', 'questiontext', $question->id);
@@ -1196,6 +1220,11 @@ class qformat_xml extends qformat_default {
         // Check question type.
         $questiontype = $this->get_qtype($question->qtype);
 
+        $idnumber = '';
+        if (isset($question->idnumber)) {
+            $idnumber = htmlspecialchars($question->idnumber, ENT_COMPAT);
+        }
+
         // Categories are a special case.
         if ($question->qtype == 'category') {
             $categorypath = $this->writetext($question->category);
@@ -1208,7 +1237,7 @@ class qformat_xml extends qformat_default {
             $expout .= "    <info {$infoformat}>\n";
             $expout .= "      {$categoryinfo}";
             $expout .= "    </info>\n";
-            $expout .= "    <idnumber>{$question->idnumber}</idnumber>\n";
+            $expout .= "    <idnumber>{$idnumber}</idnumber>\n";
             $expout .= "  </question>\n";
             return $expout;
         }
@@ -1231,8 +1260,8 @@ class qformat_xml extends qformat_default {
             $expout .= "    <defaultgrade>{$question->defaultmark}</defaultgrade>\n";
         }
         $expout .= "    <penalty>{$question->penalty}</penalty>\n";
-        $expout .= "    <hidden>{$question->hidden}</hidden>\n";
-        $expout .= "    <idnumber>{$question->idnumber}</idnumber>\n";
+        $expout .= "    <hidden>{$question->status}</hidden>\n";
+        $expout .= "    <idnumber>{$idnumber}</idnumber>\n";
 
         // The rest of the output depends on question type.
         switch($question->qtype) {
@@ -1346,10 +1375,18 @@ class qformat_xml extends qformat_default {
                         "</responserequired>\n";
                 $expout .= "    <responsefieldlines>" . $question->options->responsefieldlines .
                         "</responsefieldlines>\n";
+                $expout .= "    <minwordlimit>" . $question->options->minwordlimit .
+                        "</minwordlimit>\n";
+                $expout .= "    <maxwordlimit>" . $question->options->maxwordlimit .
+                        "</maxwordlimit>\n";
                 $expout .= "    <attachments>" . $question->options->attachments .
                         "</attachments>\n";
                 $expout .= "    <attachmentsrequired>" . $question->options->attachmentsrequired .
                         "</attachmentsrequired>\n";
+                $expout .= "    <maxbytes>" . $question->options->maxbytes .
+                        "</maxbytes>\n";
+                $expout .= "    <filetypeslist>" . $question->options->filetypeslist .
+                        "</filetypeslist>\n";
                 $expout .= "    <graderinfo " .
                         $this->format($question->options->graderinfoformat) . ">\n";
                 $expout .= $this->writetext($question->options->graderinfo, 3);
@@ -1396,22 +1433,22 @@ class qformat_xml extends qformat_default {
 
                 foreach ($question->options->answers as $answer) {
                     $percent = 100 * $answer->fraction;
-                    $expout .= "<answer fraction=\"{$percent}\">\n";
+                    $expout .= "    <answer fraction=\"{$percent}\">\n";
                     // The "<text/>" tags are an added feature, old files won't have them.
-                    $expout .= "    <text>{$answer->answer}</text>\n";
-                    $expout .= "    <tolerance>{$answer->tolerance}</tolerance>\n";
-                    $expout .= "    <tolerancetype>{$answer->tolerancetype}</tolerancetype>\n";
-                    $expout .= "    <correctanswerformat>" .
+                    $expout .= $this->writetext($answer->answer, 3);
+                    $expout .= "      <tolerance>{$answer->tolerance}</tolerance>\n";
+                    $expout .= "      <tolerancetype>{$answer->tolerancetype}</tolerancetype>\n";
+                    $expout .= "      <correctanswerformat>" .
                             $answer->correctanswerformat . "</correctanswerformat>\n";
-                    $expout .= "    <correctanswerlength>" .
+                    $expout .= "      <correctanswerlength>" .
                             $answer->correctanswerlength . "</correctanswerlength>\n";
-                    $expout .= "    <feedback {$this->format($answer->feedbackformat)}>\n";
+                    $expout .= "      <feedback {$this->format($answer->feedbackformat)}>\n";
                     $files = $fs->get_area_files($contextid, $component,
                             'instruction', $question->id);
-                    $expout .= $this->writetext($answer->feedback);
+                    $expout .= $this->writetext($answer->feedback, 4);
                     $expout .= $this->write_files($answer->feedbackfiles);
-                    $expout .= "    </feedback>\n";
-                    $expout .= "</answer>\n";
+                    $expout .= "      </feedback>\n";
+                    $expout .= "    </answer>\n";
                 }
                 if (isset($question->options->unitgradingtype)) {
                     $expout .= "    <unitgradingtype>" .

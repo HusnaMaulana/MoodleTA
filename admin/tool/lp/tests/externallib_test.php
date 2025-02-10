@@ -13,22 +13,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
-/**
- * External learning plans webservice API tests.
- *
- * @package tool_lp
- * @copyright 2015 Damyon Wiese
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
 
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-
-require_once($CFG->dirroot . '/webservice/tests/helpers.php');
+namespace tool_lp;
 
 use core_competency\api;
-use tool_lp\external;
 use core_competency\invalid_persistent_exception;
 use core_competency\plan;
 use core_competency\related_competency;
@@ -38,6 +26,13 @@ use core_competency\plan_competency;
 use core_competency\template;
 use core_competency\template_competency;
 use core_competency\course_competency_settings;
+use externallib_advanced_testcase;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+
+require_once($CFG->dirroot . '/webservice/tests/helpers.php');
 
 /**
  * External learning plans webservice API tests.
@@ -46,24 +41,24 @@ use core_competency\course_competency_settings;
  * @copyright 2015 Damyon Wiese
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class tool_lp_external_testcase extends externallib_advanced_testcase {
+final class externallib_test extends externallib_advanced_testcase {
 
-    /** @var stdClass $creator User with enough permissions to create insystem context. */
+    /** @var \stdClass $creator User with enough permissions to create insystem context. */
     protected $creator = null;
 
-    /** @var stdClass $catcreator User with enough permissions to create incategory context. */
+    /** @var \stdClass $catcreator User with enough permissions to create incategory context. */
     protected $catcreator = null;
 
-    /** @var stdClass $category Category */
+    /** @var \stdClass $category Category */
     protected $category = null;
 
-    /** @var stdClass $category Category */
+    /** @var \stdClass $category Category */
     protected $othercategory = null;
 
-    /** @var stdClass $user User with enough permissions to view insystem context */
+    /** @var \stdClass $user User with enough permissions to view insystem context */
     protected $user = null;
 
-    /** @var stdClass $catuser User with enough permissions to view incategory context */
+    /** @var \stdClass $catuser User with enough permissions to view incategory context */
     protected $catuser = null;
 
     /** @var int Creator role id */
@@ -75,7 +70,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
     /**
      * Setup function- we will create a course and add an assign instance to it.
      */
-    protected function setUp() {
+    protected function setUp(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest(true);
@@ -87,8 +82,8 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         $catcreator = $this->getDataGenerator()->create_user();
         $category = $this->getDataGenerator()->create_category();
         $othercategory = $this->getDataGenerator()->create_category();
-        $syscontext = context_system::instance();
-        $catcontext = context_coursecat::instance($category->id);
+        $syscontext = \context_system::instance();
+        $catcontext = \context_coursecat::instance($category->id);
 
         // Fetching default authenticated user role.
         $authrole = $DB->get_record('role', array('id' => $CFG->defaultuserroleid));
@@ -154,36 +149,33 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
             'email' => 'bobbyyy@dyyylan.com', 'phone1' => '123456', 'phone2' => '78910', 'department' => 'Marketing',
             'institution' => 'HQ'));
 
-        // First we search with no capability assigned.
+        // Assign capability required to perform the search.
         $this->setUser($ux);
-        $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
-        $this->assertCount(0, $result['users']);
-        $this->assertEquals(0, $result['count']);
+        $systemcontext = \context_system::instance();
+        $customrole = $this->assignUserCapability('moodle/competency:templatemanage', $systemcontext->id);
 
         // Now we assign a different capability.
-        $usercontext = context_user::instance($u1->id);
-        $systemcontext = context_system::instance();
-        $customrole = $this->assignUserCapability('moodle/competency:planview', $usercontext->id);
+        $usercontext = \context_user::instance($u1->id);
+        $this->assignUserCapability('moodle/competency:templatemanage', $usercontext->id, $customrole);
 
         $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(0, $result['users']);
         $this->assertEquals(0, $result['count']);
 
         // Now we assign a matching capability in the same role.
-        $usercontext = context_user::instance($u1->id);
+        $usercontext = \context_user::instance($u1->id);
         $this->assignUserCapability('moodle/competency:planmanage', $usercontext->id, $customrole);
 
         $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
 
         // Now assign another role with the same capability (test duplicates).
         role_assign($this->creatorrole, $ux->id, $usercontext->id);
         $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
 
@@ -192,7 +184,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         role_assign($this->creatorrole, $ux2->id, $systemcontext->id);
         $this->setUser($ux2);
         $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
 
@@ -200,8 +192,10 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         $ux3 = $dg->create_user();
         role_assign($this->creatorrole, $ux3->id, $usercontext->id);
         $this->setUser($ux3);
+        $systemcontext = \context_system::instance();
+        $customrole = $this->assignUserCapability('moodle/competency:templatemanage', $systemcontext->id, $customrole);
         $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
 
@@ -211,14 +205,14 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         // Now add a prevent override (will change nothing because we still have an ALLOW).
         assign_capability('moodle/competency:planmanage', CAP_PREVENT, $customrole, $usercontext->id);
         $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
 
         // Now change to a prohibit override (should prevent access).
         assign_capability('moodle/competency:planmanage', CAP_PROHIBIT, $customrole, $usercontext->id);
         $result = external::search_users('yyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
 
@@ -237,10 +231,10 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         $slave2 = $dg->create_user(array('lastname' => 'MOODLER'));
         $slave3 = $dg->create_user(array('lastname' => 'MOODLER'));
 
-        $syscontext = context_system::instance();
-        $slave1context = context_user::instance($slave1->id);
-        $slave2context = context_user::instance($slave2->id);
-        $slave3context = context_user::instance($slave3->id);
+        $syscontext = \context_system::instance();
+        $slave1context = \context_user::instance($slave1->id);
+        $slave2context = \context_user::instance($slave2->id);
+        $slave3context = \context_user::instance($slave3->id);
 
         // Creating a role giving the site config.
         $roleid = $dg->create_role();
@@ -275,6 +269,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
 
         // Now do the test.
         $this->setUser($master);
+        $dummyrole = $this->assignUserCapability('moodle/competency:templatemanage', $syscontext->id);
         $result = external::search_users('MOODLER', 'moodle/site:config');
         $this->assertCount(2, $result['users']);
         $this->assertEquals(2, $result['count']);
@@ -282,6 +277,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         $this->assertArrayHasKey($slave3->id, $result['users']);
 
         $this->setUser($manager);
+        $this->assignUserCapability('moodle/competency:templatemanage', $syscontext->id, $dummyrole);
         $result = external::search_users('MOODLER', 'moodle/site:config');
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
@@ -306,19 +302,19 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
 
         // We need to give the user the capability we are searching for on each of the test users.
         $this->setAdminUser();
-        $usercontext = context_user::instance($u1->id);
+        $usercontext = \context_user::instance($u1->id);
         $dummyrole = $this->assignUserCapability('moodle/competency:planmanage', $usercontext->id);
-        $usercontext = context_user::instance($u2->id);
+        $usercontext = \context_user::instance($u2->id);
         $this->assignUserCapability('moodle/competency:planmanage', $usercontext->id, $dummyrole);
-        $usercontext = context_user::instance($u3->id);
+        $usercontext = \context_user::instance($u3->id);
         $this->assignUserCapability('moodle/competency:planmanage', $usercontext->id, $dummyrole);
 
         $this->setUser($ux);
-        $usercontext = context_user::instance($u1->id);
+        $usercontext = \context_user::instance($u1->id);
         $this->assignUserCapability('moodle/competency:planmanage', $usercontext->id, $dummyrole);
-        $usercontext = context_user::instance($u2->id);
+        $usercontext = \context_user::instance($u2->id);
         $this->assignUserCapability('moodle/competency:planmanage', $usercontext->id, $dummyrole);
-        $usercontext = context_user::instance($u3->id);
+        $usercontext = \context_user::instance($u3->id);
         $this->assignUserCapability('moodle/competency:planmanage', $usercontext->id, $dummyrole);
 
         $this->setAdminUser();
@@ -326,14 +322,14 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         // No identity fields.
         $CFG->showuseridentity = '';
         $result = external::search_users('cats', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(0, $result['users']);
         $this->assertEquals(0, $result['count']);
 
         // Filter by name.
         $CFG->showuseridentity = '';
         $result = external::search_users('dyyylan', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(2, $result['users']);
         $this->assertEquals(2, $result['count']);
         $this->assertEquals($u2->id, $result['users'][0]['id']);
@@ -342,7 +338,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         // Filter by institution and name.
         $CFG->showuseridentity = 'institution';
         $result = external::search_users('bob', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(2, $result['users']);
         $this->assertEquals(2, $result['count']);
         $this->assertEquals($u1->id, $result['users'][0]['id']);
@@ -351,7 +347,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         // Filter by id number.
         $CFG->showuseridentity = 'idnumber';
         $result = external::search_users('cats', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
         $this->assertEquals($u1->id, $result['users'][0]['id']);
@@ -365,7 +361,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         // Filter by email.
         $CFG->showuseridentity = 'email';
         $result = external::search_users('yyy', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(3, $result['users']);
         $this->assertEquals(3, $result['count']);
         $this->assertEquals($u2->id, $result['users'][0]['id']);
@@ -378,7 +374,7 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
         // Filter by any.
         $CFG->showuseridentity = 'idnumber,email,phone1,phone2,department,institution';
         $result = external::search_users('yyy', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(3, $result['users']);
         $this->assertEquals(3, $result['count']);
         $this->assertArrayHasKey('idnumber', $result['users'][0]);
@@ -390,16 +386,18 @@ class tool_lp_external_testcase extends externallib_advanced_testcase {
 
         // Switch to a user that cannot view identity fields.
         $this->setUser($ux);
+        $systemcontext = \context_system::instance();
+        $this->assignUserCapability('moodle/competency:templatemanage', $systemcontext->id, $dummyrole);
         $CFG->showuseridentity = 'idnumber,email,phone1,phone2,department,institution';
 
         // Only names are included.
         $result = external::search_users('fish');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(0, $result['users']);
         $this->assertEquals(0, $result['count']);
 
         $result = external::search_users('bob', 'moodle/competency:planmanage');
-        $result = external_api::clean_returnvalue(external::search_users_returns(), $result);
+        $result = \external_api::clean_returnvalue(external::search_users_returns(), $result);
         $this->assertCount(1, $result['users']);
         $this->assertEquals(1, $result['count']);
         $this->assertEquals($u1->id, $result['users'][0]['id']);

@@ -14,27 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace filter_multilang;
+
 /**
- * Unit tests.
+ * Tests for filter_multilang.
  *
  * @package filter_multilang
  * @category test
  * @copyright 2019 The Open University
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+final class filter_test extends \advanced_testcase {
 
-defined('MOODLE_INTERNAL') || die();
-
-
-/**
- * Tests for filter_multilang.
- *
- * @copyright 2019 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class filter_multilang_filter_testcase extends advanced_testcase {
-
-    public function setUp() {
+    public function setUp(): void {
         parent::setUp();
 
         $this->resetAfterTest(true);
@@ -61,7 +53,7 @@ class filter_multilang_filter_testcase extends advanced_testcase {
     /**
      * Data provider for multi-language filtering tests.
      */
-    public function multilang_testcases() {
+    public static function multilang_testcases(): array {
         return [
             'Basic case EN' => [
                 'English',
@@ -78,7 +70,7 @@ class filter_multilang_filter_testcase extends advanced_testcase {
                 '<span lang="fr" class="multilang">Français</span><span class="multilang" lang="en">English</span>',
                 'en',
             ],
-            'Reversed input order EN' => [
+            'Reversed input order FR' => [
                 'Français',
                 '<span lang="fr" class="multilang">Français</span><span class="multilang" lang="en">English</span>',
                 'fr',
@@ -142,7 +134,7 @@ class filter_multilang_filter_testcase extends advanced_testcase {
             $this->setup_parent_language($child, $parent);
         }
 
-        $filtered = format_text($input, FORMAT_HTML, array('context' => context_system::instance()));
+        $filtered = format_text($input, FORMAT_HTML, array('context' => \context_system::instance()));
         $this->assertEquals($expectedoutput, $filtered);
     }
 }

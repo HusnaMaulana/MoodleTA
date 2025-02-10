@@ -26,10 +26,11 @@ namespace tool_dataprivacy;
 
 defined('MOODLE_INTERNAL') || die();
 
+use lang_string;
 use core\persistent;
 
 /**
- * Class for loading/storing competencies from the DB.
+ * Class for loading/storing data requests from the DB.
  *
  * @copyright  2018 Jun Pataleta
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -62,6 +63,7 @@ class data_request extends persistent {
             ],
             'comments' => [
                 'type' => PARAM_TEXT,
+                'message' => new lang_string('errorinvalidrequestcomments', 'tool_dataprivacy'),
                 'default' => ''
             ],
             'commentsformat' => [
@@ -75,7 +77,10 @@ class data_request extends persistent {
                 'default' => FORMAT_PLAIN
             ],
             'userid' => [
-                'default' => 0,
+                'default' => function() {
+                    global $USER;
+                    return $USER->id;
+                },
                 'type' => PARAM_INT
             ],
             'requestedby' => [
@@ -150,9 +155,9 @@ class data_request extends persistent {
                 case api::DATAREQUEST_STATUS_EXPIRED:
                     $result = true;
                     break;
-                // Complete requests are expired if the expiry time has elapsed.
+                // Complete requests are expired if the expiry time is a positive value, and has elapsed.
                 case api::DATAREQUEST_STATUS_DOWNLOAD_READY:
-                    $expiryseconds = get_config('tool_dataprivacy', 'privacyrequestexpiry');
+                    $expiryseconds = (int) get_config('tool_dataprivacy', 'privacyrequestexpiry');
                     if ($expiryseconds > 0 && time() >= ($request->get('timemodified') + $expiryseconds)) {
                         $result = true;
                     }
@@ -173,7 +178,12 @@ class data_request extends persistent {
     public static function get_expired_requests($userid = 0) {
         global $DB;
 
-        $expiryseconds = get_config('tool_dataprivacy', 'privacyrequestexpiry');
+        // Complete requests are expired if the expiry time is a positive value, and has elapsed.
+        $expiryseconds = (int) get_config('tool_dataprivacy', 'privacyrequestexpiry');
+        if ($expiryseconds <= 0) {
+            return [];
+        }
+
         $expirytime = strtotime("-{$expiryseconds} second");
         $table = self::TABLE;
         $sqlwhere = 'type = :export_type AND status = :completestatus AND timemodified <= :expirytime';

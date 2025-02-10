@@ -82,7 +82,7 @@ if (!empty($SESSION->has_timed_out)) {
 $frm  = false;
 $user = false;
 
-$authsequence = get_enabled_auth_plugins(true); // auths, in sequence
+$authsequence = get_enabled_auth_plugins(); // Auths, in sequence.
 foreach($authsequence as $authname) {
     $authplugin = get_auth_plugin($authname);
     // The auth plugin's loginpage_hook() can eventually set $frm and/or $user.
@@ -198,7 +198,8 @@ if ($frm and isset($frm->username)) {                             // Login WITH 
                 [
                     'username' => $frm->username,
                     'password' => $frm->password,
-                    'resendconfirmemail' => true
+                    'resendconfirmemail' => true,
+                    'logintoken' => \core\session\manager::get_login_token()
                 ]
             );
             echo $OUTPUT->single_button($resendconfirmurl, get_string('emailconfirmationresend'));
@@ -217,7 +218,7 @@ if ($frm and isset($frm->username)) {                             // Login WITH 
             // auth plugins can temporarily override this from loginpage_hook()
             // do not save $CFG->nolastloggedin in database!
 
-        } else if (empty($CFG->rememberusername) or ($CFG->rememberusername == 2 and empty($frm->rememberusername))) {
+        } else if (empty($CFG->rememberusername)) {
             // no permanent cookies, delete old one if exists
             set_moodle_cookie('');
 
@@ -243,7 +244,7 @@ if ($frm and isset($frm->username)) {                             // Login WITH 
                 $passwordchangeurl = $CFG->wwwroot.'/login/change_password.php';
             }
             $days2expire = $userauth->password_expire($USER->username);
-            $PAGE->set_title("$site->fullname: $loginsite");
+            $PAGE->set_title($loginsite);
             $PAGE->set_heading("$site->fullname");
             if (intval($days2expire) > 0 && intval($days2expire) < intval($userauth->config->expiration_warning)) {
                 echo $OUTPUT->header();
@@ -313,7 +314,7 @@ if (!empty($CFG->alternateloginurl)) {
 
     $loginurlstr = $loginurl->out(false);
 
-    if (strpos($SESSION->wantsurl, $loginurlstr) === 0) {
+    if (strpos($SESSION->wantsurl ?? '', $loginurlstr) === 0) {
         // We do not want to return to alternate url.
         $SESSION->wantsurl = null;
     }
@@ -360,7 +361,7 @@ if (!empty($SESSION->loginerrormsg)) {
     redirect(new moodle_url('/login/index.php'));
 }
 
-$PAGE->set_title("$site->fullname: $loginsite");
+$PAGE->set_title($loginsite);
 $PAGE->set_heading("$site->fullname");
 
 echo $OUTPUT->header();

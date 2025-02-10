@@ -14,21 +14,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * ldap tests.
- *
- * @package    core
- * @category   phpunit
- * @copyright  Damyon Wiese, Iñaki Arenaza 2014
- * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
- */
+namespace core;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->libdir . '/ldaplib.php');
 
-class core_ldaplib_testcase extends advanced_testcase {
+/**
+ * ldap tests.
+ *
+ * @package    core
+ * @category   test
+ * @copyright  Damyon Wiese, Iñaki Arenaza 2014
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
+ */
+final class ldaplib_test extends \advanced_testcase {
 
     public function test_ldap_addslashes() {
         // See http://tools.ietf.org/html/rfc4514#section-5.2 if you want
@@ -183,7 +184,7 @@ class core_ldaplib_testcase extends advanced_testcase {
      *
      * @return array of testcases.
      */
-    public function ldap_normalise_objectclass_provider() {
+    public static function ldap_normalise_objectclass_provider(): array {
         return array(
             'Empty value' => array(
                 array(null),

@@ -39,99 +39,143 @@ defined('MOODLE_INTERNAL') || die();
 class behat_core_generator extends behat_generator_base {
 
     protected function get_creatable_entities(): array {
-        return [
+        $entities = [
             'users' => [
+                'singular' => 'user',
                 'datagenerator' => 'user',
                 'required' => ['username'],
             ],
             'categories' => [
+                'singular' => 'category',
                 'datagenerator' => 'category',
                 'required' => ['idnumber'],
                 'switchids' => ['category' => 'parent'],
             ],
             'courses' => [
+                'singular' => 'course',
                 'datagenerator' => 'course',
                 'required' => ['shortname'],
                 'switchids' => ['category' => 'category'],
             ],
             'groups' => [
+                'singular' => 'group',
                 'datagenerator' => 'group',
                 'required' => ['idnumber', 'course'],
                 'switchids' => ['course' => 'courseid'],
             ],
             'groupings' => [
+                'singular' => 'grouping',
                 'datagenerator' => 'grouping',
                 'required' => ['idnumber', 'course'],
                 'switchids' => ['course' => 'courseid'],
             ],
             'course enrolments' => [
+                'singular' => 'course enrolment',
                 'datagenerator' => 'enrol_user',
                 'required' => ['user', 'course', 'role'],
                 'switchids' => ['user' => 'userid', 'course' => 'courseid', 'role' => 'roleid'],
             ],
             'custom field categories' => [
+                'singular' => 'custom field category',
                 'datagenerator' => 'custom_field_category',
                 'required' => ['name', 'component', 'area', 'itemid'],
                 'switchids' => [],
             ],
             'custom fields' => [
+                'singular' => 'custom field',
                 'datagenerator' => 'custom_field',
                 'required' => ['name', 'category', 'type', 'shortname'],
                 'switchids' => [],
             ],
+            'custom profile field categories' => [
+                'singular' => 'custom profile field category',
+                'datagenerator' => 'custom_profile_field_category',
+                'required' => ['name'],
+                'switchids' => [],
+            ],
+            'custom profile fields' => [
+                'singular' => 'custom profile field',
+                'datagenerator' => 'custom_profile_field',
+                'required' => ['datatype', 'shortname', 'name'],
+                'switchids' => [],
+            ],
             'permission overrides' => [
+                'singular' => 'permission override',
                 'datagenerator' => 'permission_override',
                 'required' => ['capability', 'permission', 'role', 'contextlevel', 'reference'],
                 'switchids' => ['role' => 'roleid'],
             ],
             'system role assigns' => [
+                'singular' => 'system role assignment',
                 'datagenerator' => 'system_role_assign',
                 'required' => ['user', 'role'],
                 'switchids' => ['user' => 'userid', 'role' => 'roleid'],
             ],
             'role assigns' => [
+                'singular' => 'role assignment',
                 'datagenerator' => 'role_assign',
                 'required' => ['user', 'role', 'contextlevel', 'reference'],
                 'switchids' => ['user' => 'userid', 'role' => 'roleid'],
             ],
             'activities' => [
+                'singular' => 'activity',
                 'datagenerator' => 'activity',
-                'required' => ['activity', 'idnumber', 'course'],
+                'required' => ['activity', 'course'],
                 'switchids' => ['course' => 'course', 'gradecategory' => 'gradecat', 'grouping' => 'groupingid'],
             ],
             'blocks' => [
+                'singular' => 'block',
                 'datagenerator' => 'block_instance',
                 'required' => ['blockname', 'contextlevel', 'reference'],
             ],
             'group members' => [
+                'singular' => 'group member',
                 'datagenerator' => 'group_member',
                 'required' => ['user', 'group'],
                 'switchids' => ['user' => 'userid', 'group' => 'groupid'],
             ],
             'grouping groups' => [
+                'singular' => 'grouping group',
                 'datagenerator' => 'grouping_group',
                 'required' => ['grouping', 'group'],
                 'switchids' => ['grouping' => 'groupingid', 'group' => 'groupid'],
             ],
             'cohorts' => [
+                'singular' => 'cohort',
                 'datagenerator' => 'cohort',
                 'required' => ['idnumber'],
             ],
             'cohort members' => [
+                'singular' => 'cohort member',
                 'datagenerator' => 'cohort_member',
                 'required' => ['user', 'cohort'],
                 'switchids' => ['user' => 'userid', 'cohort' => 'cohortid'],
             ],
             'roles' => [
+                'singular' => 'role',
                 'datagenerator' => 'role',
                 'required' => ['shortname'],
             ],
+            'role capabilities' => [
+                'singular' => 'role capability',
+                'datagenerator' => 'role_capability',
+                'required' => ['role'],
+                'switchids' => ['role' => 'roleid'],
+            ],
             'grade categories' => [
+                'singular' => 'grade category',
                 'datagenerator' => 'grade_category',
                 'required' => ['fullname', 'course'],
                 'switchids' => ['course' => 'courseid', 'gradecategory' => 'parent'],
             ],
+            'grade grades' => [
+                'singular' => 'grade grade',
+                'datagenerator' => 'grade_grade',
+                'required' => ['gradeitem'],
+                'switchids' => ['user' => 'userid', 'gradeitem' => 'itemid'],
+            ],
             'grade items' => [
+                'singular' => 'grade item',
                 'datagenerator' => 'grade_item',
                 'required' => ['course'],
                 'switchids' => [
@@ -142,30 +186,36 @@ class behat_core_generator extends behat_generator_base {
                 ],
             ],
             'grade outcomes' => [
+                'singular' => 'grade outcome',
                 'datagenerator' => 'grade_outcome',
                 'required' => ['shortname', 'scale'],
                 'switchids' => ['course' => 'courseid', 'gradecategory' => 'categoryid', 'scale' => 'scaleid'],
             ],
             'scales' => [
+                'singular' => 'scale',
                 'datagenerator' => 'scale',
                 'required' => ['name', 'scale'],
                 'switchids' => ['course' => 'courseid'],
             ],
             'question categories' => [
+                'singular' => 'question category',
                 'datagenerator' => 'question_category',
                 'required' => ['name', 'contextlevel', 'reference'],
                 'switchids' => ['questioncategory' => 'parent'],
             ],
             'questions' => [
+                'singular' => 'question',
                 'datagenerator' => 'question',
                 'required' => ['qtype', 'questioncategory', 'name'],
                 'switchids' => ['questioncategory' => 'category', 'user' => 'createdby'],
             ],
             'tags' => [
+                'singular' => 'tag',
                 'datagenerator' => 'tag',
                 'required' => ['name'],
             ],
             'events' => [
+                'singular' => 'event',
                 'datagenerator' => 'event',
                 'required' => ['name', 'eventtype'],
                 'switchids' => [
@@ -175,68 +225,116 @@ class behat_core_generator extends behat_generator_base {
                 ],
             ],
             'message contacts' => [
+                'singular' => 'message contact',
                 'datagenerator' => 'message_contacts',
                 'required' => ['user', 'contact'],
                 'switchids' => ['user' => 'userid', 'contact' => 'contactid'],
             ],
             'private messages' => [
+                'singular' => 'private message',
                 'datagenerator' => 'private_messages',
                 'required' => ['user', 'contact', 'message'],
                 'switchids' => ['user' => 'userid', 'contact' => 'contactid'],
             ],
             'favourite conversations' => [
+                'singular' => 'favourite conversation',
                 'datagenerator' => 'favourite_conversations',
                 'required' => ['user', 'contact'],
                 'switchids' => ['user' => 'userid', 'contact' => 'contactid'],
             ],
             'group messages' => [
+                'singular' => 'group message',
                 'datagenerator' => 'group_messages',
                 'required' => ['user', 'group', 'message'],
                 'switchids' => ['user' => 'userid', 'group' => 'groupid'],
             ],
             'muted group conversations' => [
+                'singular' => 'muted group conversation',
                 'datagenerator' => 'mute_group_conversations',
                 'required' => ['user', 'group', 'course'],
                 'switchids' => ['user' => 'userid', 'group' => 'groupid', 'course' => 'courseid'],
             ],
             'muted private conversations' => [
+                'singular' => 'muted private conversation',
                 'datagenerator' => 'mute_private_conversations',
                 'required' => ['user', 'contact'],
                 'switchids' => ['user' => 'userid', 'contact' => 'contactid'],
             ],
             'language customisations' => [
+                'singular' => 'language customisation',
                 'datagenerator' => 'customlang',
                 'required' => ['component', 'stringid', 'value'],
             ],
-            'analytics model' => [
+            'language packs' => [
+                'singular' => 'language pack',
+                'datagenerator' => 'langpack',
+                'required' => ['language'],
+            ],
+            'analytics models' => [
+                'singular' => 'analytics model',
                 'datagenerator' => 'analytics_model',
                 'required' => ['target', 'indicators', 'timesplitting', 'enabled'],
             ],
             'user preferences' => [
+                'singular' => 'user preference',
                 'datagenerator' => 'user_preferences',
                 'required' => array('user', 'preference', 'value'),
-                'switchids' => array('user' => 'userid')
+                'switchids' => array('user' => 'userid'),
             ],
-            'contentbank content' => [
+            'contentbank contents' => [
+                'singular' => 'contentbank content',
                 'datagenerator' => 'contentbank_content',
                 'required' => array('contextlevel', 'reference', 'contenttype', 'user', 'contentname'),
                 'switchids' => array('user' => 'userid')
             ],
-            'badge external backpack' => [
+            'user private files' => [
+                'singular' => 'user private file',
+                'datagenerator' => 'user_private_files',
+                'required' => ['user', 'filepath'],
+                'switchids' => ['user' => 'userid']
+            ],
+            'badge external backpacks' => [
+                'singular' => 'badge external backpack',
                 'datagenerator' => 'badge_external_backpack',
                 'required' => ['backpackapiurl', 'backpackweburl', 'apiversion']
             ],
-            'setup backpack connected' => [
+            'setup backpacks connected' => [
+                'singular' => 'setup backpack connected',
                 'datagenerator' => 'setup_backpack_connected',
                 'required' => ['user', 'externalbackpack'],
                 'switchids' => ['user' => 'userid', 'externalbackpack' => 'externalbackpackid']
             ],
             'last access times' => [
+                'singular' => 'last access time',
                 'datagenerator' => 'last_access_times',
                 'required' => ['user', 'course', 'lastaccess'],
                 'switchids' => ['user' => 'userid', 'course' => 'courseid'],
             ],
+            'notifications' => [
+                'singular' => 'notification',
+                'datagenerator' => 'notification',
+                'required' => ['subject', 'userfrom', 'userto'],
+                'switchids' => ['userfrom' => 'userfromid', 'userto' => 'usertoid'],
+            ],
         ];
+
+        return $entities;
+    }
+
+    /**
+     * Get the grade item id using a name.
+     *
+     * @param string $name
+     * @return int The grade item id
+     */
+    protected function get_gradeitem_id(string $name): int {
+        global $DB;
+
+        if (!$id = $DB->get_field('grade_items', 'id', ['itemname' => $name])) {
+            throw new Exception('The specified grade item with name "' . $name . '" could not be found.');
+        }
+
+        return $id;
     }
 
     /**
@@ -309,6 +407,22 @@ class behat_core_generator extends behat_generator_base {
             $data['categoryid'] = $cat->id;
         }
 
+        // We need to ensure that all these attributes coming from data are not-localised floats.
+        $attrs = [
+            'grademax',
+            'grademin',
+            'gradepass',
+            'multfactor',
+            'plusfactor',
+            'aggregationcoef',
+            'aggregationcoef2',
+        ];
+        foreach ($attrs as $attr) {
+            if (array_key_exists($attr, $data)) {
+                $data[$attr] = unformat_float($data[$attr]);
+            }
+        }
+
         return $data;
     }
 
@@ -336,6 +450,17 @@ class behat_core_generator extends behat_generator_base {
             }
         }
 
+        if (!array_key_exists('idnumber', $data)) {
+            $data['idnumber'] = $data['name'];
+            if (strlen($data['name']) > 100) {
+                throw new Exception(
+                    "Activity '{$activityname}' cannot be used as the default idnumber. " .
+                    "The idnumber has a max length of 100 chars. " .
+                    "Please manually specify an idnumber."
+                );
+            }
+        }
+
         // We split $data in the activity $record and the course module $options.
         $cmoptions = array();
         $cmcolumns = $DB->get_columns('course_modules');
@@ -345,13 +470,7 @@ class behat_core_generator extends behat_generator_base {
             }
         }
 
-        // Custom exception.
-        try {
-            $this->datagenerator->create_module($activityname, $data, $cmoptions);
-        } catch (coding_exception $e) {
-            throw new Exception('\'' . $activityname . '\' activity can not be added using this step,' .
-                    ' use the step \'I add a "ACTIVITY_OR_RESOURCE_NAME_STRING" to section "SECTION_NUMBER"\' instead');
-        }
+        $this->datagenerator->create_module($activityname, $data, $cmoptions);
     }
 
     /**
@@ -441,6 +560,16 @@ class behat_core_generator extends behat_generator_base {
             tool_customlang_utils::checkin($USER->lang);
         }
     }
+    /**
+     * Imports a langpack.
+     *
+     * @param array $data
+     */
+    protected function process_langpack($data) {
+        $controller = new \tool_langimport\controller();
+        $controller->install_languagepacks($data['language']);
+        get_string_manager()->reset_caches();
+    }
 
     /**
      * Adapter to enrol_user() data generator.
@@ -478,6 +607,16 @@ class behat_core_generator extends behat_generator_base {
 
         if (!isset($data['status'])) {
             $data['status'] = null;
+        } else {
+            $status = strtolower($data['status']);
+            switch ($status) {
+                case 'active':
+                    $data['status'] = ENROL_USER_ACTIVE;
+                    break;
+                case 'suspended':
+                    $data['status'] = ENROL_USER_SUSPENDED;
+                    break;
+            }
         }
 
         // If the provided course shortname is the site shortname we consider it a system role assign.
@@ -599,6 +738,23 @@ class behat_core_generator extends behat_generator_base {
         }
 
         $this->datagenerator->create_role($data);
+    }
+
+    /**
+     * Assign capabilities to a role.
+     *
+     * @param array $data
+     */
+    protected function process_role_capability($data): void {
+        // We require the user to fill the role shortname.
+        if (empty($data['roleid'])) {
+            throw new Exception('\'role capability\' requires the field \'roleid\' to be specified');
+        }
+
+        $roleid = $data['roleid'];
+        unset($data['roleid']);
+
+        $this->datagenerator->create_role_capability($roleid, $data, \context_system::instance());
     }
 
     /**
@@ -884,6 +1040,9 @@ class behat_core_generator extends behat_generator_base {
             $record = new stdClass();
             $record->usercreated = $data['userid'];
             $record->name = $data['contentname'];
+            if (isset($data['visibility'])) {
+                $record->visibility = $data['visibility'];
+            }
             $content = $contenttype->create_content($record);
 
             if (!empty($data['filepath'])) {
@@ -903,6 +1062,34 @@ class behat_core_generator extends behat_generator_base {
         } else {
             throw new Exception('The specified "' . $data['contenttype'] . '" contenttype does not exist');
         }
+    }
+
+    /**
+     * Create content in the given user's private files.
+     *
+     * @param array $data
+     * @return void
+     */
+    protected function process_user_private_files(array $data) {
+        global $CFG;
+
+        $userid = $data['userid'];
+        $fs = get_file_storage();
+        $filepath = "{$CFG->dirroot}/{$data['filepath']}";
+
+        if (!file_exists($filepath)) {
+            throw new coding_exception("File '{$filepath}' does not exist");
+        }
+        $filerecord = [
+            'userid' => $userid,
+            'contextid' => context_user::instance($userid)->id,
+            'component' => 'user',
+            'filearea' => 'private',
+            'itemid' => 0,
+            'filepath'  => '/',
+            'filename'  => basename($filepath),
+        ];
+        $fs->create_file_from_pathname($filerecord, $filepath);
     }
 
     /**
@@ -955,6 +1142,39 @@ class behat_core_generator extends behat_generator_base {
         $backpack->password = '';
         $backpack->externalbackpackid = $data['externalbackpackid'];
         $DB->insert_record('badge_backpack', $backpack);
+    }
+
+    /**
+     * Creates notifications to specific user.
+     *
+     * @param array $data
+     * @return void
+     */
+    protected function process_notification(array $data) {
+        global $DB;
+
+        $notification = new stdClass();
+        $notification->useridfrom = $data['userfromid'];
+        $notification->useridto = $data['usertoid'];
+        $notification->subject = $data['subject'];
+        $notification->fullmessage = $data['subject'] . ' description';
+        $notification->smallmessage = $data['subject'] . ' description';
+        $notification->fullmessagehtml = $data['subject'] . ' description';
+
+        if ($data['timecreated'] !== 'null') {
+            $notification->timecreated = $data['timecreated'];
+        }
+
+        if ($data['timeread'] !== 'null') {
+            $notification->timeread = $data['timeread'];
+        }
+
+        if (!empty($data)) {
+            $popupnotification = new stdClass();
+            $popupnotification->notificationid = $DB->insert_record('notifications', $notification);
+            $DB->insert_record('message_popup_notifications', $popupnotification);
+        }
+
     }
 
     /**

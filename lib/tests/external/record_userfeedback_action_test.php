@@ -39,16 +39,16 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  *
  * @copyright  2020 Shamim Rezaie <shamim@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @coversDefaultClass record_userfeedback_action
+ * @coversDefaultClass \core\external\record_userfeedback_action
  */
-class record_userfeedback_action_testcase extends externallib_advanced_testcase {
+final class record_userfeedback_action_test extends externallib_advanced_testcase {
 
     /**
      * Data provider for test_record_userfeedback_action.
      *
      * @return  array
      */
-    public function record_userfeedback_action_provider() {
+    public static function record_userfeedback_action_provider(): array {
         return [
             'give action' => ['give'],
             'remind action' => ['remind'],

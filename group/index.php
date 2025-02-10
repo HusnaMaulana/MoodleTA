@@ -70,7 +70,7 @@ if (!$singlegroup) {
         case 'showgroupsettingsform':
         case 'showaddmembersform':
         case 'updatemembers':
-            print_error('errorselectone', 'group', $returnurl);
+            throw new \moodle_exception('errorselectone', 'group', $returnurl);
     }
 }
 
@@ -81,15 +81,21 @@ switch ($action) {
     case 'ajax_getmembersingroup':
         $roles = array();
 
-        $extrafields = get_extra_user_fields($context);
+        $userfieldsapi = \core_user\fields::for_identity($context)->with_userpic();
+        [
+            'selects' => $userfieldsselects,
+            'joins' => $userfieldsjoin,
+            'params' => $userfieldsparams
+        ] = (array)$userfieldsapi->get_sql('u', true, '', '', false);
+        $extrafields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
         if ($groupmemberroles = groups_get_members_by_role($groupids[0], $courseid,
-                'u.id, ' . user_picture::fields('u', $extrafields))) {
+                'u.id, ' . $userfieldsselects, null, '', $userfieldsparams, $userfieldsjoin)) {
 
             $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
 
             foreach($groupmemberroles as $roleid=>$roledata) {
                 $shortroledata = new stdClass();
-                $shortroledata->name = $roledata->name;
+                $shortroledata->name = html_entity_decode($roledata->name, ENT_QUOTES, 'UTF-8');
                 $shortroledata->users = array();
                 foreach($roledata->users as $member) {
                     $shortmember = new stdClass();
@@ -98,7 +104,8 @@ switch ($action) {
                     if ($extrafields) {
                         $extrafieldsdisplay = [];
                         foreach ($extrafields as $field) {
-                            $extrafieldsdisplay[] = s($member->{$field});
+                            // No escaping here, handled client side in response to AJAX request.
+                            $extrafieldsdisplay[] = $member->{$field};
                         }
                         $shortmember->name .= ' (' . implode(', ', $extrafieldsdisplay) . ')';
                     }
@@ -113,7 +120,7 @@ switch ($action) {
 
     case 'deletegroup':
         if (count($groupids) == 0) {
-            print_error('errorselectsome','group',$returnurl);
+            throw new \moodle_exception('errorselectsome', 'group', $returnurl);
         }
         $groupidlist = implode(',', $groupids);
         redirect(new moodle_url('/group/delete.php', array('courseid'=>$courseid, 'groups'=>$groupidlist)));
@@ -149,7 +156,7 @@ switch ($action) {
         break;
 
     default: //ERROR.
-        print_error('unknowaction', '', $returnurl);
+        throw new \moodle_exception('unknowaction', '', $returnurl);
         break;
 }
 
@@ -163,10 +170,7 @@ $PAGE->set_heading($course->fullname);
 $PAGE->set_pagelayout('standard');
 echo $OUTPUT->header();
 
-// Add tabs
-$currenttab = 'groups';
-require('tabs.php');
-
+echo $OUTPUT->render_participants_tertiary_nav($course);
 echo $OUTPUT->heading(format_string($course->shortname, true, array('context' => $context)) .' '.$strgroups, 3);
 
 $groups = groups_get_all_groups($courseid);
@@ -179,7 +183,7 @@ if ($groups) {
     foreach ($groups as $group) {
         $selected = false;
         $usercount = $DB->count_records('groups_members', array('groupid' => $group->id));
-        $groupname = format_string($group->name) . ' (' . $usercount . ')';
+        $groupname = format_string($group->name, true, ['context' => $context, 'escape' => false]) . ' (' . $usercount . ')';
         if (in_array($group->id, $groupids)) {
             $selected = true;
             if ($singlegroup) {
@@ -194,7 +198,7 @@ if ($groups) {
         $groupoptions[] = (object) [
             'value' => $group->id,
             'selected' => $selected,
-            'text' => $groupname
+            'text' => s($groupname)
         ];
     }
 }
@@ -202,9 +206,15 @@ if ($groups) {
 // Get list of group members to render if there is a single selected group.
 $members = array();
 if ($singlegroup) {
-    $extrafields = get_extra_user_fields($context);
+    $userfieldsapi = \core_user\fields::for_identity($context)->with_userpic();
+    [
+        'selects' => $userfieldsselects,
+        'joins' => $userfieldsjoin,
+        'params' => $userfieldsparams
+    ] = (array)$userfieldsapi->get_sql('u', true, '', '', false);
+    $extrafields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
     if ($groupmemberroles = groups_get_members_by_role(reset($groupids), $courseid,
-            'u.id, ' . user_picture::fields('u', $extrafields))) {
+            'u.id, ' . $userfieldsselects, null, '', $userfieldsparams, $userfieldsjoin)) {
 
         $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
 
@@ -224,8 +234,9 @@ if ($singlegroup) {
 
                 $users[] = $shortmember;
             }
+
             $members[] = (object)[
-                'role' => s($roledata->name),
+                'role' => html_entity_decode($roledata->name, ENT_QUOTES, 'UTF-8'),
                 'rolemembers' => $users
             ];
         }
@@ -268,7 +279,7 @@ function groups_param_action($prefix = 'act_') {
     }
     if ($action && !preg_match('/^\w+$/', $action)) {
         $action = false;
-        print_error('unknowaction');
+        throw new \moodle_exception('unknowaction');
     }
     ///if (debugging()) echo 'Debug: '.$action;
     return $action;

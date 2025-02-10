@@ -41,6 +41,29 @@ class block extends base {
         return $DB->get_records_menu('block', array('visible'=>1), 'name ASC', 'name, name AS val');
     }
 
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        global $DB;
+
+        if (!$block = $DB->get_record('block', ['name' => $pluginname])) {
+            throw new \moodle_exception('blockdoesnotexist', 'error');
+        }
+
+        $haschanged = false;
+
+        // Only set visibility if it's different from the current value.
+        if ($block->visible != $enabled) {
+            // Set block visibility.
+            $DB->set_field('block', 'visible', $enabled, ['id' => $block->id]);
+            $haschanged = true;
+
+            // Include this information into config changes table.
+            add_to_config_log('block_visibility', $block->visible, $enabled, $pluginname);
+            \core_plugin_manager::reset_caches();
+        }
+
+        return $haschanged;
+    }
+
     /**
      * Magic method getter, redirects to read only values.
      *
@@ -147,11 +170,9 @@ class block extends base {
 
         if ($block = $DB->get_record('block', array('name'=>$this->name))) {
             // Inform block it's about to be deleted.
-            if (file_exists("$CFG->dirroot/blocks/$block->name/block_$block->name.php")) {
-                $blockobject = block_instance($block->name);
-                if ($blockobject) {
-                    $blockobject->before_delete();  // Only if we can create instance, block might have been already removed.
-                }
+            $blockobject = block_instance($block->name);
+            if ($blockobject) {
+                $blockobject->before_delete();  // Only if we can create instance, block might have been already removed.
             }
 
             // First delete instances and related contexts.

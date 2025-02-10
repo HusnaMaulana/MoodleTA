@@ -41,6 +41,7 @@ if (!is_null($seq)) {
 $PAGE->set_url($currenturl);
 
 $attemptobj = quiz_create_attempt_handling_errors($attemptid, $cmid);
+$attemptobj->preload_all_attempt_step_users();
 
 // Check login.
 require_login($attemptobj->get_course(), false, $attemptobj->get_cm());
@@ -100,7 +101,9 @@ $summarydata['questionname'] = array(
 
 // Other attempts at the quiz.
 if ($attemptobj->has_capability('mod/quiz:viewreports')) {
-    $attemptlist = $attemptobj->links_to_other_attempts($baseurl);
+    $otherattemptsurl = clone($baseurl);
+    $otherattemptsurl->param('slot', $attemptobj->get_original_slot($slot));
+    $attemptlist = $attemptobj->links_to_other_attempts($otherattemptsurl);
     if ($attemptlist) {
         $summarydata['attemptlist'] = array(
             'title'   => get_string('attempts', 'quiz'),

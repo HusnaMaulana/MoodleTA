@@ -368,7 +368,7 @@ function get_latest_version_available($version, $env_select) {
         return false;
     }
 /// First we look for exact version
-    if (in_array($version, $versions)) {
+    if (in_array($version, $versions, true)) {
         return $version;
     } else {
         $found_version = false;
@@ -416,7 +416,7 @@ function get_environment_for_version($version, $env_select) {
     }
 
 /// If the version requested is available
-    if (!in_array($version, $versions)) {
+    if (!in_array($version, $versions, true)) {
         return false;
     }
 
@@ -808,8 +808,15 @@ function environment_check_moodle($version, $env_select) {
     $release = get_config('', 'release');
     $current_version = normalize_version($release);
     if (strpos($release, 'dev') !== false) {
-        // when final version is required, dev is NOT enough!
-        $current_version = $current_version - 0.1;
+        // When final version is required, dev is NOT enough so, at all effects
+        // it's like we are running the previous version.
+        $versionarr = explode('.', $current_version);
+        if (isset($versionarr[1]) and $versionarr[1] > 0) {
+            $versionarr[1]--;
+            $current_version = implode('.', $versionarr);
+        } else {
+            $current_version = $current_version - 0.1;
+        }
     }
 
 /// And finally compare them, saving results
@@ -1046,14 +1053,15 @@ function environment_check_database($version, $env_select) {
 
     $dbinfo = $DB->get_server_info();
     $current_version = normalize_version($dbinfo['version']);
-    $needed_version = $vendors[$current_vendor];
 
-/// Check we have a needed version
-    if (!$needed_version) {
+    // Check we have a needed version.
+    if (empty($vendors[$current_vendor])) {
         $result->setStatus(false);
         $result->setErrorCode(NO_DATABASE_VENDOR_VERSION_FOUND);
         return $result;
     }
+
+    $needed_version = $vendors[$current_vendor];
 
     // Check if the DB Vendor has been properly configured.
     // Hack: this is required when playing with MySQL and MariaDB since they share the same PHP module and base DB classes,
@@ -1244,7 +1252,7 @@ class environment_results {
      */
     var $error_code;
     /**
-     * @var string required/optional
+     * @var string required/optional/recommended.
      */
     var $level;
     /**
@@ -1541,8 +1549,9 @@ function get_level($element) {
     $level = 'required';
     if (isset($element['@']['level'])) {
         $level = $element['@']['level'];
-        if (!in_array($level, array('required', 'optional'))) {
-            debugging('The level of a check in the environment.xml file must be "required" or "optional".', DEBUG_DEVELOPER);
+        if (!in_array($level, ['required', 'optional', 'recommended'])) {
+            debugging('The level of a check in the environment.xml file must be "required", "optional" or "recommended".',
+                DEBUG_DEVELOPER);
             $level = 'required';
         }
     } else {
@@ -1645,4 +1654,48 @@ function restrict_php_version_73(&$result) {
  */
 function restrict_php_version_74(&$result) {
     return restrict_php_version($result, '7.4');
+}
+
+/**
+ * Check if the current PHP version is greater than or equal to
+ * PHP version 8.0
+ *
+ * @param object $result an environment_results instance
+ * @return bool result of version check
+ */
+function restrict_php_version_80($result) {
+    return restrict_php_version($result, '8.0');
+}
+
+/**
+ * Check if the current PHP version is greater than or equal to
+ * PHP version 8.1
+ *
+ * @param object $result an environment_results instance
+ * @return bool result of version check
+ */
+function restrict_php_version_81($result) {
+    return restrict_php_version($result, '8.1');
+}
+
+/**
+ * Check if the current PHP version is greater than or equal to
+ * PHP version 8.2
+ *
+ * @param object $result an environment_results instance
+ * @return bool result of version check
+ */
+function restrict_php_version_82($result) {
+    return restrict_php_version($result, '8.2');
+}
+
+/**
+ * Check if the current PHP version is greater than or equal to
+ * PHP version 8.3
+ *
+ * @param object $result an environment_results instance
+ * @return bool result of version check
+ */
+function restrict_php_version_83($result) {
+    return restrict_php_version($result, '8.3');
 }

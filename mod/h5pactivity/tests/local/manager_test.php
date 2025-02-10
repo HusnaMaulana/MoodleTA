@@ -14,14 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * mod_h5pactivity manager tests
- *
- * @package    mod_h5pactivity
- * @category   test
- * @copyright  2020 Ferran Recio <ferran@moodle.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
 
 namespace mod_h5pactivity\local;
 use context_module;
@@ -31,11 +23,12 @@ use stdClass;
  * Manager tests class for mod_h5pactivity.
  *
  * @package    mod_h5pactivity
+ * @covers     \mod_h5pactivity\local\manager
  * @category   test
  * @copyright  2020 Ferran Recio <ferran@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class manager_testcase extends \advanced_testcase {
+final class manager_test extends \advanced_testcase {
 
     /**
      * Test for static create methods.
@@ -102,7 +95,7 @@ class manager_testcase extends \advanced_testcase {
      *
      * @return array
      */
-    public function is_tracking_enabled_data(): array {
+    public static function is_tracking_enabled_data(): array {
         return [
             'Logged student, tracking enabled' => [
                 true, 'student', 1, true
@@ -216,7 +209,7 @@ class manager_testcase extends \advanced_testcase {
      *
      * @return array
      */
-    public function get_users_scaled_score_data(): array {
+    public static function get_users_scaled_score_data(): array {
         return [
             'Tracking with max attempt method' => [
                 1, manager::GRADEHIGHESTATTEMPT, [1.00000, 31, 2], [0.66667, 32, 2]
@@ -293,7 +286,7 @@ class manager_testcase extends \advanced_testcase {
      *
      * @return array
      */
-    public function get_selected_attempt_data(): array {
+    public static function get_selected_attempt_data(): array {
         return [
             'Tracking with max attempt method' => [
                 1, manager::GRADEHIGHESTATTEMPT, manager::GRADEHIGHESTATTEMPT
@@ -402,7 +395,7 @@ class manager_testcase extends \advanced_testcase {
      *
      * @return array
      */
-    public function can_view_all_attempts_data(): array {
+    public static function can_view_all_attempts_data(): array {
         return [
             // No tracking cases.
             'No tracking with admin using $USER' => [
@@ -474,7 +467,7 @@ class manager_testcase extends \advanced_testcase {
      *
      * @return array
      */
-    public function can_view_own_attempts_data(): array {
+    public static function can_view_own_attempts_data(): array {
         return [
             // No tracking cases.
             'No tracking, review none, using $USER, without attempts' => [
@@ -530,7 +523,7 @@ class manager_testcase extends \advanced_testcase {
     }
 
     /**
-     * Test static count_attempts.
+     * Test static count_attempts of one user.
      */
     public function test_count_attempts() {
 
@@ -558,6 +551,225 @@ class manager_testcase extends \advanced_testcase {
         $this->assertEquals(0, $manager->count_attempts($user1->id));
         $this->assertEquals(3, $manager->count_attempts($user2->id));
         $this->assertEquals(3, $manager->count_attempts($user3->id));
+    }
+
+    /**
+     * Test static count_attempts of all active participants.
+     *
+     * @dataProvider count_attempts_all_data
+     * @param bool $canview if the student role has mod_h5pactivity/view capability
+     * @param bool $cansubmit if the student role has mod_h5pactivity/submit capability
+     * @param bool $extrarole if an extra role without submit capability is required
+     * @param int $result the expected result
+     */
+    public function test_count_attempts_all(bool $canview, bool $cansubmit, bool $extrarole, int $result) {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $activity = $this->getDataGenerator()->create_module(
+            'h5pactivity',
+            ['course' => $course]
+        );
+
+        $manager = manager::create_from_instance($activity);
+
+        $roleid = $DB->get_field('role', 'id', ['shortname' => 'student']);
+
+        $newcap = ($canview) ? CAP_ALLOW : CAP_PROHIBIT;
+        role_change_permission($roleid, $manager->get_context(), 'mod/h5pactivity:view', $newcap);
+
+        $newcap = ($cansubmit) ? CAP_ALLOW : CAP_PROHIBIT;
+        role_change_permission($roleid, $manager->get_context(), 'mod/h5pactivity:submit', $newcap);
+
+        // Teacher with review capability and attempts (should not be listed).
+        if ($extrarole) {
+            $user1 = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+            $this->generate_fake_attempts($activity, $user1, 1);
+        }
+
+        // Student with attempts.
+        $user2 = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->generate_fake_attempts($activity, $user2, 1);
+
+        // Another student with attempts.
+        $user3 = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->generate_fake_attempts($activity, $user3, 1);
+
+        $this->assertEquals($result, $manager->count_attempts());
+    }
+
+    /**
+     * Data provider for test_count_attempts_all.
+     *
+     * @return array
+     */
+    public static function count_attempts_all_data(): array {
+        return [
+            'Students with both view and submit capability' => [true, true, false, 6],
+            'Students without view but with submit capability' => [false, true, false, 0],
+            'Students with view but without submit capability' => [true, false, false, 6],
+            'Students without both view and submit capability' => [false, false, false, 0],
+            'Students with both view and submit capability and extra role' => [true, true, true, 6],
+            'Students without view but with submit capability and extra role' => [false, true, true, 0],
+            'Students with view but without submit capability and extra role' => [true, false, true, 6],
+            'Students without both view and submit capability and extra role' => [false, false, true, 0],
+        ];
+    }
+
+    /**
+     * Test static test_get_active_users_join of all active participants.
+     *
+     * Most method scenarios are tested in test_count_attempts_all so we only
+     * need to test the with $allpotentialusers true and false.
+     *
+     * @dataProvider get_active_users_join_data
+     * @param bool $allpotentialusers if the join should return all potential users or only the submitted ones.
+     * @param int $result the expected result
+     */
+    public function test_get_active_users_join(bool $allpotentialusers, int $result) {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $activity = $this->getDataGenerator()->create_module(
+            'h5pactivity',
+            ['course' => $course]
+        );
+
+        $manager = manager::create_from_instance($activity);
+
+        $user1 = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $this->generate_fake_attempts($activity, $user1, 1);
+
+        // Student with attempts.
+        $user2 = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->generate_fake_attempts($activity, $user2, 1);
+
+        // 2 more students without attempts.
+        $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $usersjoin = $manager->get_active_users_join($allpotentialusers);
+
+        // Final SQL.
+        $num = $DB->count_records_sql(
+            "SELECT COUNT(DISTINCT u.id)
+               FROM {user} u $usersjoin->joins
+              WHERE $usersjoin->wheres",
+            array_merge($usersjoin->params)
+        );
+
+        $this->assertEquals($result, $num);
+    }
+
+    /**
+     * Data provider for test_get_active_users_join.
+     *
+     * @return array
+     */
+    public static function get_active_users_join_data(): array {
+        return [
+            'All potential users' => [
+                'allpotentialusers' => true,
+                'result' => 3,
+            ],
+            'Users with attempts' => [
+                'allpotentialusers' => false,
+                'result' => 1,
+            ],
+        ];
+    }
+
+    /**
+     * Test active users joins returns appropriate results for groups
+     */
+    public function test_get_active_users_join_groupmode(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course(['groupmode' => SEPARATEGROUPS, 'groupmodeforce' => 1]);
+
+        // Teacher/user one in group one.
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'teacher');
+        $userone = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $groupone = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $groupone->id, 'userid' => $teacher->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $groupone->id, 'userid' => $userone->id]);
+
+        // User two in group two.
+        $usertwo = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $grouptwo = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $grouptwo->id, 'userid' => $usertwo->id]);
+
+        $activity = $this->getDataGenerator()->create_module('h5pactivity', ['course' => $course]);
+        $manager = manager::create_from_instance($activity);
+
+        // Admin user can view all participants.
+        $usersjoin = $manager->get_active_users_join(true, 0);
+        $users = $DB->get_fieldset_sql("SELECT u.username FROM {user} u {$usersjoin->joins} WHERE {$usersjoin->wheres}",
+            $usersjoin->params);
+
+        $this->assertEqualsCanonicalizing([$teacher->username, $userone->username, $usertwo->username], $users);
+
+        // Switch to teacher, who cannot view all participants.
+        $this->setUser($teacher);
+
+        $usersjoin = $manager->get_active_users_join(true, 0);
+        $users = $DB->get_fieldset_sql("SELECT u.username FROM {user} u {$usersjoin->joins} WHERE {$usersjoin->wheres}",
+            $usersjoin->params);
+
+        $this->assertEmpty($users);
+
+        // Teacher can view participants inside group.
+        $usersjoin = $manager->get_active_users_join(true, $groupone->id);
+        $users = $DB->get_fieldset_sql("SELECT u.username FROM {user} u {$usersjoin->joins} WHERE {$usersjoin->wheres}",
+            $usersjoin->params);
+
+        $this->assertEqualsCanonicalizing([$teacher->username, $userone->username], $users);
+    }
+
+    /**
+     * Test getting active users join where there are no roles with 'mod/h5pactivity:reviewattempts' capability
+     */
+    public function test_get_active_users_join_no_reviewers(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $activity = $this->getDataGenerator()->create_module('h5pactivity', ['course' => $course]);
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $manager = manager::create_from_instance($activity);
+
+        // By default manager and editingteacher can review attempts, prohibit both.
+        $rolemanager = $DB->get_field('role', 'id', ['shortname' => 'manager']);
+        role_change_permission($rolemanager, $manager->get_context(), 'mod/h5pactivity:reviewattempts', CAP_PROHIBIT);
+
+        $roleeditingteacher = $DB->get_field('role', 'id', ['shortname' => 'editingteacher']);
+        role_change_permission($roleeditingteacher, $manager->get_context(), 'mod/h5pactivity:reviewattempts', CAP_PROHIBIT);
+
+        // Generate users join SQL to find matching users.
+        $usersjoin = $manager->get_active_users_join(true);
+        $usernames = $DB->get_fieldset_sql(
+            "SELECT u.username
+               FROM {user} u
+                    {$usersjoin->joins}
+              WHERE {$usersjoin->wheres}",
+            $usersjoin->params
+        );
+
+        $this->assertEquals([$user->username], $usernames);
     }
 
     /**
@@ -683,7 +895,7 @@ class manager_testcase extends \advanced_testcase {
      *
      * @return array
      */
-    public function get_report_data(): array {
+    public static function get_report_data(): array {
         return [
             // No tracking scenarios.
             'No tracking, review none, no attempts, teacher' => [
@@ -739,6 +951,94 @@ class manager_testcase extends \advanced_testcase {
     }
 
     /**
+     * Test teacher access to student reports (get_report) when course groupmode is SEPARATEGROUPS.
+     * @covers ::get_report()
+     * @dataProvider get_report_data_groupmode
+     *
+     * @param bool $activitygroupmode Course or activity groupmode
+     */
+    public function test_get_report_groupmode(bool $activitygroupmode): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        if ($activitygroupmode) {
+            $course = $this->getDataGenerator()->create_course(['groupmode' => NOGROUPS, 'groupmodeforce' => 0]);
+            $activitysettings = ['course' => $course, 'groupmode' => SEPARATEGROUPS];
+        } else {
+            $course = $this->getDataGenerator()->create_course(['groupmode' => SEPARATEGROUPS, 'groupmodeforce' => 1]);
+            $activitysettings = ['course' => $course];
+        }
+
+        $activity = $this->getDataGenerator()->create_module('h5pactivity', $activitysettings);
+
+        // Grant mod/h5pactivity:reviewattempts to non-editing teacher.
+        // At the time of writing this is not set by default (see MDL-80028).
+        $teacherrole = $DB->get_record('role', ['shortname' => 'teacher']);
+        role_change_permission($teacherrole->id,
+            \context_course::instance($course->id), 'mod/h5pactivity:reviewattempts', CAP_ALLOW);
+
+        $manager = manager::create_from_instance($activity);
+
+        $editingteacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $teacher1 = $this->getDataGenerator()->create_and_enrol($course, 'teacher');
+        $teacher2 = $this->getDataGenerator()->create_and_enrol($course, 'teacher');
+        $student1 = $this->getDataGenerator()->create_and_enrol($course);
+        $student2 = $this->getDataGenerator()->create_and_enrol($course);
+        $student3 = $this->getDataGenerator()->create_and_enrol($course);
+
+        $group1 = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $group1->id, 'userid' => $teacher1->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $group1->id, 'userid' => $student1->id]);
+
+        $group2 = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $group2->id, 'userid' => $student2->id]);
+
+        // Check reports.
+
+        // Editing teachers can view all users, those in any group or no group.
+        $this->setUser($editingteacher);
+        $report = $manager->get_report($student1->id);
+        $this->assertNotNull($report);
+        $report = $manager->get_report($student3->id);
+        $this->assertNotNull($report);
+
+        // Non-editing teacher can view student, both members of same group.
+        $this->setUser($teacher1);
+        $report = $manager->get_report($student1->id);
+        $this->assertNotNull($report);
+
+        // Non-editing teacher cannot view student in no group.
+        $report = $manager->get_report($student3->id);
+        $this->assertNull($report);
+
+        // Non-editing teacher cannot view student in different group.
+        $report = $manager->get_report($student2->id);
+        $this->assertNull($report);
+
+        // Non-editing teacher in no group can view no one.
+        $this->setUser($teacher2);
+        $report = $manager->get_report($student1->id);
+        $this->assertNull($report);
+        $report = $manager->get_report($student3->id);
+        $this->assertNull($report);
+    }
+
+    /**
+     * Data provider for test_get_report_groupmode.
+     *
+     * @return array
+     */
+    public static function get_report_data_groupmode(): array {
+        return [
+            // No tracking scenarios.
+            'course groupmode is SEPARATEGROUPS' => [false],
+            'course groupmode is NOGROUPS, activity groupmode is SEPARATEGROUPS' => [true],
+        ];
+    }
+
+    /**
      * Test get_attempt method.
      *
      * @dataProvider get_attempt_data
@@ -788,7 +1088,7 @@ class manager_testcase extends \advanced_testcase {
      *
      * @return array
      */
-    public function get_attempt_data(): array {
+    public static function get_attempt_data(): array {
         return [
             'Get the current activity attempt' => [
                 'current', 'current'

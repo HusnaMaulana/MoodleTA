@@ -14,26 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for session manager class.
- *
- * @package    core
- * @category   phpunit
- * @copyright  2013 Petr Skoda {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace core;
 
 /**
  * Unit tests for session manager class.
  *
  * @package    core
- * @category   phpunit
+ * @category   test
  * @copyright  2013 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_session_manager_testcase extends advanced_testcase {
+class session_manager_test extends \advanced_testcase {
     public function test_start() {
         $this->resetAfterTest();
         // Session must be started only once...
@@ -64,7 +55,7 @@ class core_session_manager_testcase extends advanced_testcase {
         $this->assertSame($GLOBALS['SESSION'], $SESSION);
 
         $this->assertInstanceOf('stdClass', $USER);
-        $this->assertEquals(array('id' => 0, 'mnethostid' => 1), (array)$USER, '', 0, 10, true);
+        $this->assertEqualsCanonicalizing(array('id' => 0, 'mnethostid' => 1), (array)$USER);
         $this->assertSame($GLOBALS['USER'], $_SESSION['USER']);
         $this->assertSame($GLOBALS['USER'], $USER);
 
@@ -80,7 +71,7 @@ class core_session_manager_testcase extends advanced_testcase {
         $this->assertSame($GLOBALS['SESSION'], $_SESSION['SESSION']);
         $this->assertSame($GLOBALS['SESSION'], $SESSION);
 
-        $_SESSION['SESSION'] = new stdClass();
+        $_SESSION['SESSION'] = new \stdClass();
         $_SESSION['SESSION']->test3 = true;
         $this->assertSame($GLOBALS['SESSION'], $_SESSION['SESSION']);
         $this->assertSame($GLOBALS['SESSION'], $SESSION);
@@ -95,7 +86,7 @@ class core_session_manager_testcase extends advanced_testcase {
         $this->assertSame($GLOBALS['USER'], $_SESSION['USER']);
         $this->assertSame($GLOBALS['USER'], $USER);
 
-        $_SESSION['USER'] = new stdClass();
+        $_SESSION['USER'] = new \stdClass();
         $_SESSION['USER']->test3 = true;
         $this->assertSame($GLOBALS['USER'], $_SESSION['USER']);
         $this->assertSame($GLOBALS['USER'], $USER);
@@ -154,7 +145,7 @@ class core_session_manager_testcase extends advanced_testcase {
         $this->assertSame($GLOBALS['SESSION'], $SESSION);
 
         $this->assertInstanceOf('stdClass', $USER);
-        $this->assertEquals(array('id' => 0, 'mnethostid' => 1), (array)$USER, '', 0, 10, true);
+        $this->assertEqualsCanonicalizing(array('id' => 0, 'mnethostid' => 1), (array)$USER);
         $this->assertSame($GLOBALS['USER'], $_SESSION['USER']);
         $this->assertSame($GLOBALS['USER'], $USER);
     }
@@ -189,7 +180,7 @@ class core_session_manager_testcase extends advanced_testcase {
 
         $this->assertFalse(\core\session\manager::session_exists($sid));
 
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->userid = 0;
         $record->sid = $sid;
         $record->timecreated = time();
@@ -510,12 +501,14 @@ class core_session_manager_testcase extends advanced_testcase {
         $record->timemodified = time() - 60*20;
         $r2 = $DB->insert_record('sessions', $record);
 
+        // Guest session still within the session timeout limit.
         $record->sid          = md5('hokus3');
         $record->userid       = $guestid;
         $record->timecreated  = time() - 60*60*60;
-        $record->timemodified = time() - 60*20;
+        $record->timemodified = time() - 60*5;
         $r3 = $DB->insert_record('sessions', $record);
 
+        // Guest session outside the session timeout limit.
         $record->sid          = md5('hokus4');
         $record->userid       = $guestid;
         $record->timecreated  = time() - 60*60*60;
@@ -568,10 +561,10 @@ class core_session_manager_testcase extends advanced_testcase {
 
         // Try admin loginas this user in system context.
         $this->assertObjectNotHasAttribute('realuser', $USER);
-        \core\session\manager::loginas($user->id, context_system::instance());
+        \core\session\manager::loginas($user->id, \context_system::instance());
 
         $this->assertSame($user->id, $USER->id);
-        $this->assertEquals(context_system::instance(), $USER->loginascontext);
+        $this->assertEquals(\context_system::instance(), $USER->loginascontext);
         $this->assertSame($adminuser->id, $USER->realuser);
         $this->assertSame($GLOBALS['USER'], $_SESSION['USER']);
         $this->assertSame($GLOBALS['USER'], $USER);
@@ -590,7 +583,7 @@ class core_session_manager_testcase extends advanced_testcase {
         $this->setUser($user);
         $this->assertNotEquals($adminuser->id, $USER->id);
         $course = $this->getDataGenerator()->create_course();
-        $coursecontext = context_course::instance($course->id);
+        $coursecontext = \context_course::instance($course->id);
 
         // Catch event triggered.
         $sink = $this->redirectEvents();
@@ -624,7 +617,7 @@ class core_session_manager_testcase extends advanced_testcase {
         $this->assertFalse(\core\session\manager::is_loggedinas());
 
         $this->setUser($user1);
-        \core\session\manager::loginas($user2->id, context_system::instance());
+        \core\session\manager::loginas($user2->id, \context_system::instance());
 
         $this->assertTrue(\core\session\manager::is_loggedinas());
     }
@@ -639,7 +632,7 @@ class core_session_manager_testcase extends advanced_testcase {
         $normal = \core\session\manager::get_realuser();
         $this->assertSame($GLOBALS['USER'], $normal);
 
-        \core\session\manager::loginas($user2->id, context_system::instance());
+        \core\session\manager::loginas($user2->id, \context_system::instance());
 
         $real = \core\session\manager::get_realuser();
 
@@ -803,7 +796,7 @@ class core_session_manager_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function sessionlocks_info_provider() : array {
+    public static function sessionlocks_info_provider(): array {
         return [
             [
                 'url'      => null,
@@ -857,12 +850,12 @@ class core_session_manager_testcase extends advanced_testcase {
 
     public function test_array_session_diff_same_array() {
         $a = [];
-        $a['c'] = new stdClass();
-        $a['c']->o = new stdClass();
-        $a['c']->o->o = new stdClass();
+        $a['c'] = new \stdClass();
+        $a['c']->o = new \stdClass();
+        $a['c']->o->o = new \stdClass();
         $a['c']->o->o->l = 'cool';
 
-        $class = new ReflectionClass('\core\session\manager');
+        $class = new \ReflectionClass('\core\session\manager');
         $method = $class->getMethod('array_session_diff');
         $method->setAccessible(true);
 
@@ -873,21 +866,21 @@ class core_session_manager_testcase extends advanced_testcase {
 
     public function test_array_session_diff_first_array_larger() {
         $a = [];
-        $a['stdClass'] = new stdClass();
+        $a['stdClass'] = new \stdClass();
         $a['stdClass']->attribute = 'This is an attribute';
         $a['array'] = ['array', 'contents'];
 
         $b = [];
         $b['array'] = ['array', 'contents'];
 
-        $class = new ReflectionClass('\core\session\manager');
+        $class = new \ReflectionClass('\core\session\manager');
         $method = $class->getMethod('array_session_diff');
         $method->setAccessible(true);
 
         $result = $method->invokeArgs(null, [$a, $b]);
 
         $expected = [];
-        $expected['stdClass'] = new stdClass();
+        $expected['stdClass'] = new \stdClass();
         $expected['stdClass']->attribute = 'This is an attribute';
         $this->assertEquals($expected, $result);
     }
@@ -897,11 +890,11 @@ class core_session_manager_testcase extends advanced_testcase {
         $a['array'] = ['array', 'contents'];
 
         $b = [];
-        $b['stdClass'] = new stdClass();
+        $b['stdClass'] = new \stdClass();
         $b['stdClass']->attribute = 'This is an attribute';
         $b['array'] = ['array', 'contents'];
 
-        $class = new ReflectionClass('\core\session\manager');
+        $class = new \ReflectionClass('\core\session\manager');
         $method = $class->getMethod('array_session_diff');
         $method->setAccessible(true);
 

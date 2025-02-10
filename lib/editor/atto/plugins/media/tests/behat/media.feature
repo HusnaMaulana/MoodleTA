@@ -1,17 +1,17 @@
-@editor @editor_atto @atto @atto_media @_file_upload
+@editor @editor_atto @atto @atto_media
 Feature: Add media to Atto
   To write rich text - I need to add media.
 
   Background:
-    Given I log in as "admin"
+    Given the following "user private files" exist:
+      | user  | filepath                                          |
+      | admin | lib/editor/atto/tests/fixtures/moodle-logo.webm   |
+      | admin | lib/editor/atto/tests/fixtures/moodle-logo.mp4    |
+      | admin | lib/editor/atto/tests/fixtures/moodle-logo.png    |
+      | admin | lib/editor/atto/tests/fixtures/pretty-good-en.vtt |
+      | admin | lib/editor/atto/tests/fixtures/pretty-good-sv.vtt |
+    And I log in as "admin"
     And I change window size to "large"
-    And I follow "Manage private files..."
-    And I upload "lib/editor/atto/tests/fixtures/moodle-logo.webm" file to "Files" filemanager
-    And I upload "lib/editor/atto/tests/fixtures/moodle-logo.mp4" file to "Files" filemanager
-    And I upload "lib/editor/atto/tests/fixtures/moodle-logo.png" file to "Files" filemanager
-    And I upload "lib/editor/atto/tests/fixtures/pretty-good-en.vtt" file to "Files" filemanager
-    And I upload "lib/editor/atto/tests/fixtures/pretty-good-sv.vtt" file to "Files" filemanager
-    And I click on "Save changes" "button"
     And I follow "Profile" in the user menu
     And I follow "Blog entries"
     And I follow "Add a new entry"

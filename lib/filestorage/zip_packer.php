@@ -297,11 +297,17 @@ class zip_packer extends file_packer {
 
             $size = $info->size;
             $name = $info->pathname;
+            $origname = $name;
+
+            // File names cannot end with dots on Windows and trailing dots are replaced with underscore.
+            if ($CFG->ostype === 'WINDOWS') {
+                $name = preg_replace('~([^/]+)\.(/|$)~', '\1_\2', $name);
+            }
 
             if ($name === '' or array_key_exists($name, $processed)) {
                 // Probably filename collisions caused by filename cleaning/conversion.
                 continue;
-            } else if (is_array($onlyfiles) && !in_array($name, $onlyfiles)) {
+            } else if (is_array($onlyfiles) && !in_array($origname, $onlyfiles)) {
                 // Skipping files which are not in the list.
                 continue;
             }
@@ -341,33 +347,58 @@ class zip_packer extends file_packer {
             }
 
             $newfile = "$newdir/$filename";
-            if (!$fp = fopen($newfile, 'wb')) {
-                $processed[$name] = 'Can not write target file'; // TODO: localise
-                $success = false;
-                continue;
-            }
-            if (!$fz = $ziparch->get_stream($info->index)) {
-                $processed[$name] = 'Can not read file from zip archive'; // TODO: localise
-                $success = false;
+
+            if (strpos($newfile, './') > 1 || $name !== $origname) {
+                // The path to the entry contains a directory ending with dot. We cannot use extract_to() due to
+                // upstream PHP bugs #69477, #74619 and #77214. Extract the file from its stream which is slower but
+                // should work even in this case.
+                if (!$fp = fopen($newfile, 'wb')) {
+                    $processed[$name] = 'Can not write target file'; // TODO: localise.
+                    $success = false;
+                    continue;
+                }
+
+                if (!$fz = $ziparch->get_stream($info->index)) {
+                    $processed[$name] = 'Can not read file from zip archive'; // TODO: localise.
+                    $success = false;
+                    fclose($fp);
+                    continue;
+                }
+
+                while (!feof($fz)) {
+                    $content = fread($fz, 262143);
+                    fwrite($fp, $content);
+                }
+
+                fclose($fz);
                 fclose($fp);
+
+            } else {
+                if (!$fz = $ziparch->extract_to($pathname, $info->index)) {
+                    $processed[$name] = 'Can not read file from zip archive'; // TODO: localise.
+                    $success = false;
+                    continue;
+                }
+            }
+
+            // Check that the file was correctly created in the destination.
+            if (!file_exists($newfile)) {
+                $processed[$name] = 'Unknown error during zip extraction (file not created).'; // TODO: localise.
+                $success = false;
                 continue;
             }
 
-            while (!feof($fz)) {
-                $content = fread($fz, 262143);
-                fwrite($fp, $content);
-            }
-            fclose($fz);
-            fclose($fp);
+            // Check that the size of extracted file matches the expectation.
             if (filesize($newfile) !== $size) {
-                $processed[$name] = 'Unknown error during zip extraction'; // TODO: localise
+                $processed[$name] = 'Unknown error during zip extraction (file size mismatch).'; // TODO: localise.
                 $success = false;
-                // something went wrong :-(
                 @unlink($newfile);
                 continue;
             }
+
             $processed[$name] = true;
         }
+
         $ziparch->close();
 
         if ($returnbool) {
@@ -456,8 +487,16 @@ class zip_packer extends file_packer {
                     continue;
                 }
                 $content = '';
+                $realfilesize = 0;
                 while (!feof($fz)) {
                     $content .= fread($fz, 262143);
+                    $realfilesize = strlen($content); // Current file size.
+
+                    // More was read than was expected, which indicates a malformed/malicious archive.
+                    // Break and let the error handling below take care of the file clean up.
+                    if ($realfilesize > $size) {
+                        break;
+                    }
                 }
                 fclose($fz);
                 if (strlen($content) !== $size) {
@@ -502,9 +541,17 @@ class zip_packer extends file_packer {
                     $processed[$name] = 'Can not read file from zip archive'; // TODO: localise
                     continue;
                 }
+                $realfilesize = 0;
                 while (!feof($fz)) {
                     $content = fread($fz, 262143);
-                    fwrite($fp, $content);
+                    $numofbytes = fwrite($fp, $content);
+                    $realfilesize += $numofbytes; // Current file size.
+
+                    // More was read than was expected, which indicates a malformed/malicious archive.
+                    // Break and let the error handling below take care of the file clean up.
+                    if ($realfilesize > $size) {
+                        break;
+                    }
                 }
                 fclose($fz);
                 fclose($fp);

@@ -42,7 +42,7 @@ use externallib_advanced_testcase;
  * @copyright  2020 Ferran Recio <ferran@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class get_attempts_testcase extends externallib_advanced_testcase {
+final class get_attempts_test extends externallib_advanced_testcase {
 
     /**
      * Test the behaviour of get_attempts.
@@ -154,7 +154,7 @@ class get_attempts_testcase extends externallib_advanced_testcase {
      *
      * @return  array
      */
-    public function execute_data(): array {
+    public static function execute_data(): array {
         return [
             // Teacher checking a user with attempts.
             'Manual grade, Teacher asking participant with attempts' => [
@@ -458,7 +458,7 @@ class get_attempts_testcase extends externallib_advanced_testcase {
      *
      * @return  array
      */
-    public function execute_multipleusers_data(): array {
+    public static function execute_multipleusers_data(): array {
         return [
             // Teacher checks.
             'Teacher checking students with attempts' => [
@@ -468,7 +468,7 @@ class get_attempts_testcase extends externallib_advanced_testcase {
                 'editingteacher', ['student1', 'noattempts'], [], ['student1', 'noattempts']
             ],
             'Teacher checking no students' => [
-                'editingteacher', [], ['editingteacher'], []
+                'editingteacher', [], [], ['editingteacher']
             ],
             'Teacher checking one student and a no enrolled user' => [
                 'editingteacher', ['student1', 'noenrolled'], ['noenrolled'], ['student1']

@@ -14,29 +14,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Event description tests.
- *
- * @package    core_calendar
- * @copyright  2017 Cameron Ball <cameron@cameron1729.xyz>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace core_calendar;
 
 use core_calendar\local\event\value_objects\event_description;
 
 /**
  * Action testcase.
  *
+ * @package core_calendar
  * @copyright 2017 Cameron Ball <cameron@cameron1729.xyz>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_calendar_event_description_testcase extends advanced_testcase {
+final class event_description_test extends \advanced_testcase {
     /**
      * Test event description class getters.
      *
-     * @dataProvider getters_testcases()
+     * @dataProvider getters_testcases
      * @param array $constructorparams Associative array of constructor parameters.
      */
     public function test_getters($constructorparams) {
@@ -52,7 +45,7 @@ class core_calendar_event_description_testcase extends advanced_testcase {
     /**
      * Test cases for getters test.
      */
-    public function getters_testcases() {
+    public static function getters_testcases(): array {
         return [
             'Dataset 1' => [
                 'constructorparams' => [

@@ -14,22 +14,26 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core_course;
+
 /**
  * Module lib related unit tests
  *
- * @package    core
- * @category   phpunit
+ * @package    core_course
+ * @category   test
  * @copyright  2016 Juan Leyva
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/course/lib.php');
-require_once($CFG->dirroot . '/course/modlib.php');
-
-class core_course_modlib_testcase extends advanced_testcase {
+final class modlib_test extends \advanced_testcase {
+    /**
+     * Setup to ensure that fixtures are loaded.
+     */
+    public static function setUpBeforeClass(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/course/lib.php');
+        require_once($CFG->dirroot . '/course/modlib.php');
+        parent::setUpBeforeClass();
+    }
 
     /**
      * Test prepare_new_moduleinfo_data
@@ -40,7 +44,7 @@ class core_course_modlib_testcase extends advanced_testcase {
 
         $this->setAdminUser();
         $course = self::getDataGenerator()->create_course();
-        $coursecontext = context_course::instance($course->id);
+        $coursecontext = \context_course::instance($course->id);
         // Test with a complex module, like assign.
         $assignmodule = $DB->get_record('modules', array('name' => 'assign'), '*', MUST_EXIST);
         $sectionnumber = 1;
@@ -50,7 +54,7 @@ class core_course_modlib_testcase extends advanced_testcase {
         $this->assertEquals($coursecontext, $context);
         $this->assertNull($cm); // Not cm yet.
 
-        $expecteddata = new stdClass();
+        $expecteddata = new \stdClass();
         $expecteddata->section          = $sectionnumber;
         $expecteddata->visible          = 1;
         $expecteddata->course           = $course->id;
@@ -63,6 +67,8 @@ class core_course_modlib_testcase extends advanced_testcase {
         $expecteddata->coursemodule     = '';
         $expecteddata->advancedgradingmethod_submissions = ''; // Not grading methods enabled by default.
         $expecteddata->completion       = 0;
+        $expecteddata->downloadcontent  = DOWNLOAD_COURSE_CONTENT_ENABLED;
+
         // Unset untestable.
         unset($data->introeditor);
         unset($data->_advancedgradingdata);
@@ -88,7 +94,7 @@ class core_course_modlib_testcase extends advanced_testcase {
         $assignmodule = $DB->get_record('modules', array('name' => 'assign'), '*', MUST_EXIST);
         $assign = self::getDataGenerator()->create_module('assign', array('course' => $course->id));
         $assigncm = get_coursemodule_from_id('assign', $assign->cmid);
-        $assigncontext = context_module::instance($assign->cmid);
+        $assigncontext = \context_module::instance($assign->cmid);
 
         list($cm, $context, $module, $data, $cw) = get_moduleinfo_data($assigncm, $course);
         $this->assertEquals($assigncm, $cm);
@@ -112,12 +118,15 @@ class core_course_modlib_testcase extends advanced_testcase {
         $expecteddata->completionview     = $assigncm->completionview;
         $expecteddata->completionexpected = $assigncm->completionexpected;
         $expecteddata->completionusegrade = is_null($assigncm->completiongradeitemnumber) ? 0 : 1;
+        $expecteddata->completionpassgrade = $assigncm->completionpassgrade;
         $expecteddata->completiongradeitemnumber = null;
         $expecteddata->showdescription    = $assigncm->showdescription;
-        $expecteddata->tags               = core_tag_tag::get_item_tags_array('core', 'course_modules', $assigncm->id);
+        $expecteddata->downloadcontent    = $assigncm->downloadcontent;
+        $expecteddata->tags               = \core_tag_tag::get_item_tags_array('core', 'course_modules', $assigncm->id);
+        $expecteddata->lang               = null;
         $expecteddata->availabilityconditionsjson = null;
         $expecteddata->advancedgradingmethod_submissions = null;
-        if ($items = grade_item::fetch_all(array('itemtype' => 'mod', 'itemmodule' => 'assign',
+        if ($items = \grade_item::fetch_all(array('itemtype' => 'mod', 'itemmodule' => 'assign',
                                                     'iteminstance' => $assign->id, 'courseid' => $course->id))) {
             // set category if present
             $gradecat = false;
@@ -138,6 +147,7 @@ class core_course_modlib_testcase extends advanced_testcase {
             }
         }
         $expecteddata->gradepass = '0.00';
+        $expecteddata->completionpassgrade = $assigncm->completionpassgrade;
 
         // Unset untestable.
         unset($expecteddata->cmid);

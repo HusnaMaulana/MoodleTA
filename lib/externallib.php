@@ -64,6 +64,7 @@ class external_api {
      * @param int $strictness IGNORE_MISSING means compatible mode, false returned if record not found, debug message if more found;
      *                        MUST_EXIST means throw exception if no record or multiple records found
      * @return stdClass description or false if not found or exception thrown
+     * @throws coding_exception for any property and/or method that is missing or invalid
      * @since Moodle 2.0
      */
     public static function external_function_info($function, $strictness=MUST_EXIST) {
@@ -84,8 +85,8 @@ class external_api {
                 $function->classpath = $CFG->dirroot.'/'.$function->classpath;
             }
             if (!file_exists($function->classpath)) {
-                throw new coding_exception('Cannot find file ' . $function->classpath .
-                        ' with external function implementation');
+                throw new coding_exception("Cannot find file {$function->classpath} with external function implementation " .
+                    "for {$function->classname}::{$function->methodname}");
             }
             require_once($function->classpath);
             if (!class_exists($function->classname)) {
@@ -198,7 +199,7 @@ class external_api {
         // Eventually this should shift into the various handlers and not be handled via config.
         $readonlysession = $externalfunctioninfo->readonlysession ?? false;
         if (!$readonlysession || empty($CFG->enable_read_only_sessions)) {
-            \core\session\manager::restart_with_write_lock();
+            \core\session\manager::restart_with_write_lock($readonlysession);
         }
 
         $currentpage = $PAGE;
@@ -250,7 +251,7 @@ class external_api {
                 foreach ($plugins as $plugin => $callback) {
                     $result = $callback($externalfunctioninfo, $params);
                     if ($result !== false) {
-                        break;
+                        break 2;
                     }
                 }
             }
@@ -857,7 +858,7 @@ class external_warnings extends external_multiple_structure {
                     'item' => new external_value(PARAM_TEXT, $itemdesc, VALUE_OPTIONAL),
                     'itemid' => new external_value(PARAM_INT, $itemiddesc, VALUE_OPTIONAL),
                     'warningcode' => new external_value(PARAM_ALPHANUM, $warningcodedesc),
-                    'message' => new external_value(PARAM_TEXT,
+                    'message' => new external_value(PARAM_RAW,
                             'untranslated english message to explain the warning')
                 ), 'warning'),
             'list of warnings', VALUE_OPTIONAL);
@@ -1105,7 +1106,7 @@ function external_generate_token_for_current_user($service) {
             $unsettoken = true;
         }
 
-        // Remove token if its ip not in whitelist.
+        // Remove token if its IP is restricted.
         if (isset($token->iprestriction) and !address_in_subnet(getremoteaddr(), $token->iprestriction)) {
             $unsettoken = true;
         }
@@ -1172,7 +1173,7 @@ function external_generate_token_for_current_user($service) {
  * @since  Moodle 3.2
  */
 function external_log_token_request($token) {
-    global $DB;
+    global $DB, $USER;
 
     $token->privatetoken = null;
 
@@ -1185,6 +1186,25 @@ function external_log_token_request($token) {
     $event = \core\event\webservice_token_sent::create($params);
     $event->add_record_snapshot('external_tokens', $token);
     $event->trigger();
+
+    // Check if we need to notify the user about the new login via token.
+    $loginip = getremoteaddr();
+    if ($USER->lastip != $loginip &&
+            ((!WS_SERVER && !CLI_SCRIPT && NO_MOODLE_COOKIES) || PHPUNIT_TEST)) {
+
+        $logintime = time();
+        $useragent = \core_useragent::get_user_agent_string();
+        $ismoodleapp = \core_useragent::is_moodle_app();
+
+        // Schedule adhoc task to sent a login notification to the user.
+        $task = new \core\task\send_login_notifications();
+        $task->set_userid($USER->id);
+        $task->set_custom_data(compact('ismoodleapp', 'useragent', 'loginip', 'logintime'));
+        $task->set_component('core');
+        // We need sometime so the mobile app will send to Moodle the device information after login.
+        $task->set_next_run_time($logintime + (2 * MINSECS));
+        \core\task\manager::reschedule_or_queue_adhoc_task($task);
+    }
 }
 
 /**
@@ -1217,6 +1237,9 @@ class external_settings {
     /** @var string The session lang */
     private $lang = '';
 
+    /** @var string The timezone to use during this WS request */
+    private $timezone = '';
+
     /**
      * Constructor - protected - can not be instanciated
      */
@@ -1227,12 +1250,6 @@ class external_settings {
             // Use pluginfile.php for web requests.
             $this->file = 'pluginfile.php';
         }
-    }
-
-    /**
-     * Clone - private - can not be cloned
-     */
-    private final function __clone() {
     }
 
     /**
@@ -1336,6 +1353,24 @@ class external_settings {
      */
     public function get_lang() {
         return $this->lang;
+    }
+
+    /**
+     * Set timezone
+     *
+     * @param string $timezone
+     */
+    public function set_timezone($timezone) {
+        $this->timezone = $timezone;
+    }
+
+    /**
+     * Get timezone
+     *
+     * @return string
+     */
+    public function get_timezone() {
+        return $this->timezone;
     }
 }
 

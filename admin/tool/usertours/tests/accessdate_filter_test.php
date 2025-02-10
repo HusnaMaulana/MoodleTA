@@ -14,17 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Tests for time filter.
- *
- * @package    tool_usertours
- * @copyright  2019 Tom Dickman <tomdickman@catalyst-au.net>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace tool_usertours;
 
-defined('MOODLE_INTERNAL') || die();
-
-use tool_usertours\tour;
 use tool_usertours\local\filter\accessdate;
 
 /**
@@ -34,9 +25,8 @@ use tool_usertours\local\filter\accessdate;
  * @copyright  2019 Tom Dickman <tomdickman@catalyst-au.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class tool_usertours_accessdate_filter_test extends advanced_testcase {
-
-    public function setUp() {
+final class accessdate_filter_test extends \advanced_testcase {
+    public function setUp(): void {
         $this->resetAfterTest(true);
     }
 
@@ -45,7 +35,7 @@ class tool_usertours_accessdate_filter_test extends advanced_testcase {
      *
      * @return array
      */
-    public function filter_matches_provider() {
+    public static function filter_matches_provider(): array {
         return [
             'No config set; Matches' => [
                 [],

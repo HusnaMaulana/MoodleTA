@@ -150,13 +150,6 @@ class file_picker implements renderable {
  */
 class user_picture implements renderable {
     /**
-     * @var array List of mandatory fields in user record here. (do not include
-     * TEXT columns because it would break SELECT DISTINCT in MSSQL and ORACLE)
-     */
-    protected static $fields = array('id', 'picture', 'firstname', 'lastname', 'firstnamephonetic', 'lastnamephonetic',
-            'middlename', 'alternatename', 'imagealt', 'email');
-
-    /**
      * @var stdClass A user object with at least fields all columns specified
      * in $fields array constant set.
      */
@@ -174,9 +167,8 @@ class user_picture implements renderable {
     public $link = true;
 
     /**
-     * @var int Size in pixels. Special values are (true/1 = 100px) and
-     * (false/0 = 35px)
-     * for backward compatibility.
+     * @var int Size in pixels. Special values are (true/1 = 100px) and (false/0 = 35px) for backward compatibility.
+     * Recommended values (supporting user initials too): 16, 35, 64 and 100.
      */
     public $size = 35;
 
@@ -227,17 +219,18 @@ class user_picture implements renderable {
 
         // only touch the DB if we are missing data and complain loudly...
         $needrec = false;
-        foreach (self::$fields as $field) {
+        foreach (\core_user\fields::get_picture_fields() as $field) {
             if (!property_exists($user, $field)) {
                 $needrec = true;
                 debugging('Missing '.$field.' property in $user object, this is a performance problem that needs to be fixed by a developer. '
-                          .'Please use user_picture::fields() to get the full list of required fields.', DEBUG_DEVELOPER);
+                          .'Please use the \core_user\fields API to get the full list of required fields.', DEBUG_DEVELOPER);
                 break;
             }
         }
 
         if ($needrec) {
-            $this->user = $DB->get_record('user', array('id'=>$user->id), self::fields(), MUST_EXIST);
+            $this->user = $DB->get_record('user', array('id' => $user->id),
+                    implode(',', \core_user\fields::get_picture_fields()), MUST_EXIST);
         } else {
             $this->user = clone($user);
         }
@@ -255,39 +248,23 @@ class user_picture implements renderable {
      * @param string $idalias alias of id field
      * @param string $fieldprefix prefix to add to all columns in their aliases, does not apply to 'id'
      * @return string
+     * @deprecated since Moodle 3.11 MDL-45242
+     * @see \core_user\fields
      */
     public static function fields($tableprefix = '', array $extrafields = NULL, $idalias = 'id', $fieldprefix = '') {
-        if (!$tableprefix and !$extrafields and !$idalias) {
-            return implode(',', self::$fields);
-        }
-        if ($tableprefix) {
-            $tableprefix .= '.';
-        }
-        foreach (self::$fields as $field) {
-            if ($field === 'id' and $idalias and $idalias !== 'id') {
-                $fields[$field] = "$tableprefix$field AS $idalias";
-            } else {
-                if ($fieldprefix and $field !== 'id') {
-                    $fields[$field] = "$tableprefix$field AS $fieldprefix$field";
-                } else {
-                    $fields[$field] = "$tableprefix$field";
-                }
-            }
-        }
-        // add extra fields if not already there
+        debugging('user_picture::fields() is deprecated. Please use the \core_user\fields API instead.', DEBUG_DEVELOPER);
+        $userfields = \core_user\fields::for_userpic();
         if ($extrafields) {
-            foreach ($extrafields as $e) {
-                if ($e === 'id' or isset($fields[$e])) {
-                    continue;
-                }
-                if ($fieldprefix) {
-                    $fields[$e] = "$tableprefix$e AS $fieldprefix$e";
-                } else {
-                    $fields[$e] = "$tableprefix$e";
-                }
-            }
+            $userfields->including(...$extrafields);
         }
-        return implode(',', $fields);
+        $selects = $userfields->get_sql($tableprefix, false, $fieldprefix, $idalias, false)->selects;
+        if ($tableprefix === '') {
+            // If no table alias is specified, don't add {user}. in front of fields.
+            $selects = str_replace('{user}.', '', $selects);
+        }
+        // Maintain legacy behaviour where the field list was done with 'implode' and no spaces.
+        $selects = str_replace(', ', ',', $selects);
+        return $selects;
     }
 
     /**
@@ -310,7 +287,7 @@ class user_picture implements renderable {
 
         $return = new stdClass();
 
-        foreach (self::$fields as $field) {
+        foreach (\core_user\fields::get_picture_fields() as $field) {
             if ($field === 'id') {
                 if (property_exists($record, $idalias)) {
                     $return->id = $record->{$idalias};
@@ -758,7 +735,7 @@ class pix_icon implements renderable, templatable {
         return [
             'key' => $this->pix,
             'component' => $this->component,
-            'title' => $title
+            'title' => (string) $title,
         ];
     }
 }
@@ -877,6 +854,7 @@ class single_button implements renderable {
      * @param moodle_url $url
      * @param string $label button text
      * @param string $method get or post submit method
+     * @param bool $primary whether this is a primary button, used for styling
      * @param array $attributes Attributes for the HTML button tag
      */
     public function __construct(moodle_url $url, $label, $method='post', $primary=false, $attributes = []) {
@@ -942,13 +920,11 @@ class single_button implements renderable {
         }
 
         // Form parameters.
-        $params = $this->url->params();
+        $actionurl = new moodle_url($this->url);
         if ($this->method === 'post') {
-            $params['sesskey'] = sesskey();
+            $actionurl->param('sesskey', sesskey());
         }
-        $data->params = array_map(function($key) use ($params) {
-            return ['name' => $key, 'value' => $params[$key]];
-        }, array_keys($params));
+        $data->params = $actionurl->export_params_for_template();
 
         // Button actions.
         $actions = $this->actions;
@@ -1150,13 +1126,11 @@ class single_select implements renderable, templatable {
         }, array_keys($attributes));
 
         // Form parameters.
-        $params = $this->url->params();
+        $actionurl = new moodle_url($this->url);
         if ($this->method === 'post') {
-            $params['sesskey'] = sesskey();
+            $actionurl->param('sesskey', sesskey());
         }
-        $data->params = array_map(function($key) use ($params) {
-            return ['name' => $key, 'value' => $params[$key]];
-        }, array_keys($params));
+        $data->params = $actionurl->export_params_for_template();
 
         // Select options.
         $hasnothing = false;
@@ -1553,6 +1527,9 @@ class action_link implements renderable {
                                 pix_icon $icon=null) {
         $this->url = clone($url);
         $this->text = $text;
+        if (empty($attributes['id'])) {
+            $attributes['id'] = html_writer::random_id('action_link');
+        }
         $this->attributes = (array)$attributes;
         if ($action) {
             $this->add_action($action);
@@ -1612,9 +1589,6 @@ class action_link implements renderable {
         $data = new stdClass();
         $attributes = $this->attributes;
 
-        if (empty($attributes['id'])) {
-            $attributes['id'] = html_writer::random_id('action_link');
-        }
         $data->id = $attributes['id'];
         unset($attributes['id']);
 
@@ -1852,6 +1826,8 @@ class html_writer {
 
     /**
      * Generates a simple select form field
+     *
+     * Note this function does HTML escaping on the optgroup labels, but not on the choice labels.
      *
      * @param array $options associative array value=>label ex.:
      *                array(1=>'One, 2=>Two)
@@ -2340,6 +2316,10 @@ class html_writer {
         }
         $output .= html_writer::end_tag('table') . "\n";
 
+        if ($table->responsive) {
+            return self::div($output, 'table-responsive');
+        }
+
         return $output;
     }
 
@@ -2368,7 +2348,7 @@ class html_writer {
         if (!is_null($for)) {
             $attributes = array_merge($attributes, array('for' => $for));
         }
-        $text = trim($text);
+        $text = trim($text ?? '');
         $label = self::tag('label', $text, $attributes);
 
         // TODO MDL-12192 $colonize disabled for now yet
@@ -2790,6 +2770,9 @@ class html_table {
      * $t->captionhide = true;
      */
     public $captionhide = false;
+
+    /** @var bool Whether to make the table to be scrolled horizontally with ease. Make table responsive across all viewports. */
+    public $responsive = true;
 
     /**
      * Constructor
@@ -3407,6 +3390,15 @@ class block_contents {
     public function add_class($class) {
         $this->attributes['class'] .= ' '.$class;
     }
+
+    /**
+     * Check if the block is a fake block.
+     *
+     * @return boolean
+     */
+    public function is_fake() {
+        return isset($this->attributes['data-block']) && $this->attributes['data-block'] == '_fake';
+    }
 }
 
 
@@ -3490,6 +3482,9 @@ class custom_menu_item implements renderable, templatable {
      */
     protected $lastsort = 0;
 
+    /** @var array Array of other HTML attributes for the custom menu item. */
+    protected $attributes = [];
+
     /**
      * Constructs the new custom menu item
      *
@@ -3499,13 +3494,19 @@ class custom_menu_item implements renderable, templatable {
      * @param int $sort A sort or to use if we need to sort differently [Optional]
      * @param custom_menu_item $parent A reference to the parent custom_menu_item this child
      *        belongs to, only if the child has a parent. [Optional]
+     * @param array $attributes Array of other HTML attributes for the custom menu item.
      */
-    public function __construct($text, moodle_url $url=null, $title=null, $sort = null, custom_menu_item $parent = null) {
-        $this->text = $text;
+    public function __construct($text, moodle_url $url = null, $title = null, $sort = null, custom_menu_item $parent = null,
+                                array $attributes = []) {
+
+        // Use class setter method for text to ensure it's always a string type.
+        $this->set_text($text);
+
         $this->url = $url;
         $this->title = $title;
         $this->sort = (int)$sort;
         $this->parent = $parent;
+        $this->attributes = $attributes;
     }
 
     /**
@@ -3515,14 +3516,15 @@ class custom_menu_item implements renderable, templatable {
      * @param moodle_url $url
      * @param string $title
      * @param int $sort
+     * @param array $attributes Array of other HTML attributes for the custom menu item.
      * @return custom_menu_item
      */
-    public function add($text, moodle_url $url = null, $title = null, $sort = null) {
+    public function add($text, moodle_url $url = null, $title = null, $sort = null, $attributes = []) {
         $key = count($this->children);
         if (empty($sort)) {
             $sort = $this->lastsort + 1;
         }
-        $this->children[$key] = new custom_menu_item($text, $url, $title, $sort, $this);
+        $this->children[$key] = new custom_menu_item($text, $url, $title, $sort, $this, $attributes);
         $this->lastsort = (int)$sort;
         return $this->children[$key];
     }
@@ -3653,10 +3655,18 @@ class custom_menu_item implements renderable, templatable {
         $syscontext = context_system::instance();
 
         $context = new stdClass();
+        $context->moremenuid = uniqid();
         $context->text = external_format_string($this->text, $syscontext->id);
         $context->url = $this->url ? $this->url->out() : null;
-        $context->title = external_format_string($this->title, $syscontext->id);
+        // No need for the title if it's the same with text.
+        if ($this->text !== $this->title) {
+            // Show the title attribute only if it's different from the text.
+            $context->title = external_format_string($this->title, $syscontext->id);
+        }
         $context->sort = $this->sort;
+        if (!empty($this->attributes)) {
+            $context->attributes = $this->attributes;
+        }
         $context->children = array();
         if (preg_match("/^#+$/", $this->text)) {
             $context->divider = true;
@@ -3768,7 +3778,7 @@ class custom_menu extends custom_menu_item {
             $settings = explode('|', $line);
             foreach ($settings as $i => $setting) {
                 $setting = trim($setting);
-                if (!empty($setting)) {
+                if ($setting !== '') {
                     switch ($i) {
                         case 0: // Menu text.
                             $itemtext = ltrim($setting, '-');
@@ -3992,6 +4002,10 @@ class context_header implements renderable {
      *                       page => page object. Don't include if the image is an external image.
      */
     public $additionalbuttons;
+    /**
+     * @var string $prefix A string that is before the title.
+     */
+    public $prefix;
 
     /**
      * Constructor.
@@ -4000,8 +4014,9 @@ class context_header implements renderable {
      * @param int $headinglevel Main heading 'h' tag level.
      * @param string|null $imagedata HTML code for the picture in the page header.
      * @param string $additionalbuttons Buttons for the header e.g. Messaging button for the user header.
+     * @param string $prefix Text that precedes the heading.
      */
-    public function __construct($heading = null, $headinglevel = 1, $imagedata = null, $additionalbuttons = null) {
+    public function __construct($heading = null, $headinglevel = 1, $imagedata = null, $additionalbuttons = null, $prefix = null) {
 
         $this->heading = $heading;
         $this->headinglevel = $headinglevel;
@@ -4011,6 +4026,7 @@ class context_header implements renderable {
         if (isset($this->additionalbuttons)) {
             $this->format_button_images();
         }
+        $this->prefix = $prefix;
     }
 
     /**
@@ -4218,6 +4234,12 @@ class action_menu implements renderable, templatable {
     public $menutrigger = '';
 
     /**
+     * An array of attributes added to the trigger element of the secondary menu.
+     * @var array
+     */
+    public $triggerattributes = [];
+
+    /**
      * Any extra classes for toggling to the secondary menu.
      * @var string
      */
@@ -4228,6 +4250,12 @@ class action_menu implements renderable, templatable {
      * @var bool
      */
     public $prioritise = false;
+
+    /**
+     * Dropdown menu alignment class.
+     * @var string
+     */
+    public $dropdownalignment = '';
 
     /**
      * Constructs the action menu with the given items.
@@ -4247,7 +4275,6 @@ class action_menu implements renderable, templatable {
         $this->attributesprimary = array(
             'id' => 'action-menu-'.$this->instance.'-menubar',
             'class' => 'menubar',
-            'role' => 'menubar'
         );
         $this->attributessecondary = array(
             'id' => 'action-menu-'.$this->instance.'-menu',
@@ -4256,7 +4283,7 @@ class action_menu implements renderable, templatable {
             'aria-labelledby' => 'action-menu-toggle-'.$this->instance,
             'role' => 'menu'
         );
-        $this->set_alignment(self::TR, self::BR);
+        $this->dropdownalignment = 'dropdown-menu-right';
         foreach ($actions as $action) {
             $this->add($action);
         }
@@ -4332,6 +4359,7 @@ class action_menu implements renderable, templatable {
     public function add_primary_action($action) {
         if ($action instanceof action_link || $action instanceof pix_icon) {
             $action->attributes['role'] = 'menuitem';
+            $action->attributes['tabindex'] = '-1';
             if ($action instanceof action_menu_link) {
                 $action->actionmenu = $this;
             }
@@ -4347,6 +4375,7 @@ class action_menu implements renderable, templatable {
     public function add_secondary_action($action) {
         if ($action instanceof action_link || $action instanceof pix_icon) {
             $action->attributes['role'] = 'menuitem';
+            $action->attributes['tabindex'] = '-1';
             if ($action instanceof action_menu_link) {
                 $action->actionmenu = $this;
             }
@@ -4404,7 +4433,8 @@ class action_menu implements renderable, templatable {
             'title' => $title,
             'aria-label' => $label,
             'id' => 'action-menu-toggle-'.$this->instance,
-            'role' => 'menuitem'
+            'role' => 'menuitem',
+            'tabindex' => '-1',
         );
         $link = html_writer::link('#', $string . $this->menutrigger . $pixicon, $attributes);
         if ($this->prioritise) {
@@ -4434,10 +4464,13 @@ class action_menu implements renderable, templatable {
     /**
      * Sets the alignment of the dialogue in relation to button used to toggle it.
      *
+     * @deprecated since Moodle 4.0
+     *
      * @param int $dialogue One of action_menu::TL, action_menu::TR, action_menu::BL, action_menu::BR.
      * @param int $button One of action_menu::TL, action_menu::TR, action_menu::BL, action_menu::BR.
      */
     public function set_alignment($dialogue, $button) {
+        debugging('The method action_menu::set_alignment() is deprecated, use action_menu::set_menu_left()', DEBUG_DEVELOPER);
         if (isset($this->attributessecondary['data-align'])) {
             // We've already got one set, lets remove the old class so as to avoid troubles.
             $class = $this->attributessecondary['class'];
@@ -4471,6 +4504,14 @@ class action_menu implements renderable, templatable {
     }
 
     /**
+     * Aligns the left corner of the dropdown.
+     *
+     */
+    public function set_menu_left() {
+        $this->dropdownalignment = 'dropdown-menu-left';
+    }
+
+    /**
      * Sets a constraint for the dialogue.
      *
      * The constraint is applied when the dialogue is shown and limits the display of the dialogue to within the
@@ -4483,6 +4524,22 @@ class action_menu implements renderable, templatable {
      */
     public function set_constraint($ancestorselector) {
         $this->attributessecondary['data-constraint'] = $ancestorselector;
+    }
+
+    /**
+     * Set the overflow constraint boundary of the dropdown menu.
+     * @see https://getbootstrap.com/docs/4.6/components/dropdowns/#options The 'boundary' option in the Bootstrap documentation
+     *
+     * @param string $boundary Accepts the values of 'viewport', 'window', or 'scrollParent'.
+     * @throws coding_exception
+     */
+    public function set_boundary(string $boundary) {
+        if (!in_array($boundary, ['viewport', 'window', 'scrollParent'])) {
+            throw new coding_exception("HTMLElement reference boundaries are not supported." .
+                "Accepted boundaries are 'viewport', 'window', or 'scrollParent'.", DEBUG_DEVELOPER);
+        }
+
+        $this->triggerattributes['data-boundary'] = $boundary;
     }
 
     /**
@@ -4534,6 +4591,19 @@ class action_menu implements renderable, templatable {
     }
 
     /**
+     * Add classes to the action menu for an easier styling.
+     *
+     * @param string $class The class to add to attributes.
+     */
+    public function set_additional_classes(string $class = '') {
+        if (!empty($this->attributes['class'])) {
+            $this->attributes['class'] .= " ".$class;
+        } else {
+            $this->attributes['class'] = $class;
+        }
+    }
+
+    /**
      * Export for template.
      *
      * @param renderer_base $output The renderer.
@@ -4541,6 +4611,12 @@ class action_menu implements renderable, templatable {
      */
     public function export_for_template(renderer_base $output) {
         $data = new stdClass();
+        // Assign a role of menubar to this action menu when:
+        // - it contains 2 or more primary actions; or
+        // - if it contains a primary action and secondary actions.
+        if (count($this->primaryactions) > 1 || (!empty($this->primaryactions) && !empty($this->secondaryactions))) {
+            $this->attributes['role'] = 'menubar';
+        }
         $attributes = $this->attributes;
         $attributesprimary = $this->attributesprimary;
         $attributessecondary = $this->attributessecondary;
@@ -4563,6 +4639,9 @@ class action_menu implements renderable, templatable {
         $primary->attributes = array_map(function($key, $value) {
             return [ 'name' => $key, 'value' => $value ];
         }, array_keys($attributesprimary), $attributesprimary);
+        $primary->triggerattributes = array_map(function($key, $value) {
+            return [ 'name' => $key, 'value' => $value ];
+        }, array_keys($this->triggerattributes), $this->triggerattributes);
 
         $actionicon = $this->actionicon;
         if (!empty($this->menutrigger)) {
@@ -4579,6 +4658,12 @@ class action_menu implements renderable, templatable {
             $primary->title = get_string('actionsmenu');
             $iconattributes = ['class' => 'iconsmall actionmenu', 'title' => $primary->title];
             $actionicon = new pix_icon('t/edit_menu', '', 'moodle', $iconattributes);
+        }
+
+        // If the menu trigger is within the menubar, assign a role of menuitem. Otherwise, assign as a button.
+        $primary->triggerrole = 'button';
+        if (isset($attributes['role']) && $attributes['role'] === 'menubar') {
+            $primary->triggerrole = 'menuitem';
         }
 
         if ($actionicon instanceof pix_icon) {
@@ -4631,6 +4716,7 @@ class action_menu implements renderable, templatable {
 
         $data->primary = $primary;
         $data->secondary = $secondary;
+        $data->dropdownalignment = $this->dropdownalignment;
 
         return $data;
     }
@@ -4657,6 +4743,7 @@ class action_menu_filler extends action_link implements renderable {
      * Constructs the object.
      */
     public function __construct() {
+        $this->attributes['id'] = html_writer::random_id('action_link');
     }
 }
 
@@ -4683,15 +4770,21 @@ class action_menu_link extends action_link implements renderable {
     public $actionmenu = null;
 
     /**
+     * The number of instances of this action menu link (and its subclasses).
+     * @var int
+     */
+    protected static $instance = 1;
+
+    /**
      * Constructs the object.
      *
      * @param moodle_url $url The URL for the action.
-     * @param pix_icon $icon The icon to represent the action.
+     * @param pix_icon|null $icon The icon to represent the action.
      * @param string $text The text to represent the action.
      * @param bool $primary Whether this is a primary action or not.
      * @param array $attributes Any attribtues associated with the action.
      */
-    public function __construct(moodle_url $url, pix_icon $icon = null, $text, $primary = true, array $attributes = array()) {
+    public function __construct(moodle_url $url, ?pix_icon $icon, $text, $primary = true, array $attributes = array()) {
         parent::__construct($url, $text, null, $attributes, $icon);
         $this->primary = (bool)$primary;
         $this->add_class('menu-action');
@@ -4705,10 +4798,8 @@ class action_menu_link extends action_link implements renderable {
      * @return stdClass
      */
     public function export_for_template(renderer_base $output) {
-        static $instance = 1;
-
         $data = parent::export_for_template($output);
-        $data->instance = $instance++;
+        $data->instance = self::$instance++;
 
         // Ignore what the parent did with the attributes, except for ID and class.
         $data->attributes = [];
@@ -4759,11 +4850,11 @@ class action_menu_link_primary extends action_menu_link {
      * Constructs the object.
      *
      * @param moodle_url $url
-     * @param pix_icon $icon
+     * @param pix_icon|null $icon
      * @param string $text
      * @param array $attributes
      */
-    public function __construct(moodle_url $url, pix_icon $icon = null, $text, array $attributes = array()) {
+    public function __construct(moodle_url $url, ?pix_icon $icon, $text, array $attributes = array()) {
         parent::__construct($url, $icon, $text, true, $attributes);
     }
 }
@@ -4781,11 +4872,11 @@ class action_menu_link_secondary extends action_menu_link {
      * Constructs the object.
      *
      * @param moodle_url $url
-     * @param pix_icon $icon
+     * @param pix_icon|null $icon
      * @param string $text
      * @param array $attributes
      */
-    public function __construct(moodle_url $url, pix_icon $icon = null, $text, array $attributes = array()) {
+    public function __construct(moodle_url $url, ?pix_icon $icon, $text, array $attributes = array()) {
         parent::__construct($url, $icon, $text, false, $attributes);
     }
 }
@@ -4904,6 +4995,14 @@ class progress_bar implements renderable, templatable {
     }
 
     /**
+     * Getter for ID
+     * @return string id
+     */
+    public function get_id() : string {
+        return $this->html_id;
+    }
+
+    /**
      * Create a new progress bar, this function will output html.
      *
      * @return void Echo's output
@@ -4912,9 +5011,6 @@ class progress_bar implements renderable, templatable {
         global $OUTPUT;
 
         $this->time_start = microtime(true);
-        if (CLI_SCRIPT) {
-            return; // Temporary solution for cli scripts.
-        }
 
         flush();
         echo $OUTPUT->render($this);
@@ -4930,13 +5026,11 @@ class progress_bar implements renderable, templatable {
      * @throws coding_exception
      */
     private function _update($percent, $msg) {
+        global $OUTPUT;
+
         if (empty($this->time_start)) {
             throw new coding_exception('You must call create() (or use the $autostart ' .
                     'argument to the constructor) before you try updating the progress bar.');
-        }
-
-        if (CLI_SCRIPT) {
-            return; // Temporary solution for cli scripts.
         }
 
         $estimate = $this->estimate($percent);
@@ -4952,16 +5046,15 @@ class progress_bar implements renderable, templatable {
             return;
         }
 
-        $estimatemsg = null;
-        if (is_numeric($estimate)) {
-            $estimatemsg = get_string('secondsleft', 'moodle', round($estimate, 2));
+        $estimatemsg = '';
+        if ($estimate != 0 && is_numeric($estimate)) {
+            $estimatemsg = format_time(round($estimate));
         }
 
-        $this->percent = round($percent, 2);
+        $this->percent = $percent;
         $this->lastupdate = microtime(true);
 
-        echo html_writer::script(js_writer::function_call('updateProgressBar',
-            array($this->html_id, $this->percent, $msg, $estimatemsg)));
+        echo $OUTPUT->render_progress_bar_update($this->html_id, sprintf("%.1f", $this->percent), $msg, $estimatemsg);
         flush();
     }
 
